@@ -3,6 +3,7 @@ import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog 
 import SettingsModal from './components/SettingsModal';
 import { ToastProvider, useToast } from './components/Toast';
 import GameCard from './components/GameCard';
+import HoverOverlay from './components/HoverOverlay';
 
 // Types mirrored from preload
 export type VideoItem = {
@@ -52,6 +53,8 @@ const Library: React.FC = () => {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const ioRef = useRef<IntersectionObserver | null>(null);
   const { show } = useToast();
+  const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
+  const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[] } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -193,7 +196,23 @@ const Library: React.FC = () => {
         {/* Grid */}
         <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
         {filtered.map(v => (
-          <div key={v.path} data-path={v.path}>
+          <div
+            key={v.path}
+            data-path={v.path}
+            onMouseEnter={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              setHoverRect(rect);
+              setHoverPayload({
+                title: v.name,
+                thumb: v.thumb,
+                lines: [
+                  'Last two weeks: 0 min',
+                  'Total: 0 min',
+                ],
+              });
+            }}
+            onMouseLeave={() => { setHoverRect(null); setHoverPayload(null); }}
+          >
             <GameCard
               title={v.name}
               cover={v.thumb}
@@ -219,6 +238,16 @@ const Library: React.FC = () => {
           <div className="text-slate-400">No videos found in this folder. Click "Choose Folder" to select another directory.</div>
         )}
         </div>
+
+        <HoverOverlay
+          open={!!hoverRect && !!hoverPayload}
+          anchorRect={hoverRect || undefined}
+          title={hoverPayload?.title || ''}
+          thumb={hoverPayload?.thumb}
+          lines={hoverPayload?.lines || []}
+          width={260}
+          offset={12}
+        />
 
       {/* Recently Watched */}
       {Object.keys(history).length > 0 && (
