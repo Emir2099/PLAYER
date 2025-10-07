@@ -6,6 +6,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import ElectronStore from 'electron-store';
+import { execFile } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 // Lazy require to avoid ESM/CJS friction
@@ -226,6 +227,43 @@ async function getVideoMeta(filePath: string): Promise<{ duration?: number; thum
   }
   return { duration, thumb };
 }
+
+function resolveFFPaths() {
+  let ff: string | undefined = undefined;
+  let fp: string | undefined = undefined;
+  try { ff = (store.get('ffmpegPath') as string) || undefined; } catch {}
+  try { fp = (store.get('ffprobePath') as string) || undefined; } catch {}
+  if (!ff && ffmpegPath) ff = ffmpegPath as string;
+  if (!fp && ffprobeStatic?.path) fp = ffprobeStatic.path;
+  // As a last resort, rely on PATH names
+  if (!ff) ff = 'ffmpeg';
+  if (!fp) fp = 'ffprobe';
+  return { ffmpeg: ff, ffprobe: fp };
+}
+
+ipcMain.handle('ff:test', async () => {
+  const { ffmpeg: ff, ffprobe: fp } = resolveFFPaths();
+  const run = (cmd: string, args: string[]) => new Promise<{ ok: boolean; out?: string; err?: any }>(resolve => {
+    try {
+      execFile(cmd, args, { windowsHide: true }, (error, stdout, stderr) => {
+        if (error) return resolve({ ok: false, err: String(error?.message || error) });
+        resolve({ ok: true, out: stdout || stderr });
+      });
+    } catch (e: any) {
+      resolve({ ok: false, err: String(e?.message || e) });
+    }
+  });
+  const [ffmpegRes, ffprobeRes] = await Promise.all([
+    run(ff, ['-version']),
+    run(fp, ['-version'])
+  ]);
+  return {
+    ffmpegOk: !!ffmpegRes.ok,
+    ffprobeOk: !!ffprobeRes.ok,
+    ffmpegError: ffmpegRes.ok ? undefined : ffmpegRes.err,
+    ffprobeError: ffprobeRes.ok ? undefined : ffprobeRes.err,
+  };
+});
 
 ipcMain.handle('dialog:selectFolder', async () => {
   const defaultPath = ((): string | undefined => {

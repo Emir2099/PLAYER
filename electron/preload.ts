@@ -23,6 +23,7 @@ type Api = {
   selectFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
   getFFPaths: () => Promise<{ ffmpegPath?: string; ffprobePath?: string }>;
   setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
+  testFF: () => Promise<{ ffmpegOk: boolean; ffprobeOk: boolean; ffmpegError?: string; ffprobeError?: string }>;
 };
 
 const api: Api = {
@@ -38,6 +39,7 @@ const api: Api = {
   selectFile: (filters?: Array<{ name: string; extensions: string[] }>) => ipcRenderer.invoke('dialog:selectFile', filters),
   getFFPaths: () => ipcRenderer.invoke('store:getFFPaths'),
   setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => ipcRenderer.invoke('store:setFFPaths', v),
+  testFF: () => ipcRenderer.invoke('ff:test'),
 };
 
 declare global {

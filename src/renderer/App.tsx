@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog } from 'react-icons/fa';
 import SettingsModal from './components/SettingsModal';
+import { ToastProvider, useToast } from './components/Toast';
 
 // Types mirrored from preload
 export type VideoItem = {
@@ -29,7 +30,7 @@ function fileUrl(p: string) {
   return 'file:///' + encodeURI(normalized);
 }
 
-const App: React.FC = () => {
+const Library: React.FC = () => {
   const [folder, setFolder] = useState<string>('');
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [query, setQuery] = useState('');
@@ -37,6 +38,11 @@ const App: React.FC = () => {
   const [selected, setSelected] = useState<VideoItem | null>(null);
   const [history, setHistory] = useState<Record<string, number>>({});
   const [showSettings, setShowSettings] = useState(false);
+  const [categories] = useState<string[]>(['All', 'Movies', 'Clips', 'Series']);
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const ioRef = useRef<IntersectionObserver | null>(null);
+  const { show } = useToast();
 
   useEffect(() => {
     (async () => {
@@ -46,9 +52,7 @@ const App: React.FC = () => {
       setHistory(await window.api.getHistory());
       const items = await window.api.scanVideos(base, { recursive: true, depth: 3 });
       setVideos(items);
-      for (const v of items.slice(0, 24)) {
-        window.api.getMeta(v.path).then(meta => setVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p)));
-      }
+      refreshMeta(items);
     })();
   }, []);
 
@@ -80,54 +84,111 @@ const App: React.FC = () => {
   };
 
   const refreshMeta = (items: VideoItem[] = videos) => {
+    // prime first fold
     for (const v of items.slice(0, 24)) {
       window.api.getMeta(v.path).then(meta => setVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p)));
+    }
+    // lazy queue for rest via IntersectionObserver
+    setTimeout(() => {
+      try {
+        if (!gridRef.current) return;
+        if (ioRef.current) ioRef.current.disconnect();
+        ioRef.current = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              const el = entry.target as HTMLElement;
+              const p = el.getAttribute('data-path');
+              if (!p) continue;
+              // unobserve to avoid duplicate fetches
+              ioRef.current?.unobserve(el);
+              window.api.getMeta(p).then(meta => setVideos(prev => prev.map(x => x.path === p ? { ...x, ...meta } : x)));
+            }
+          }
+        }, { rootMargin: '200px 0px' });
+        const children = gridRef.current.querySelectorAll('[data-path]');
+        children.forEach((c) => ioRef.current!.observe(c));
+      } catch {}
+    }, 100);
+  };
+
+  const testFF = async () => {
+    const res = await window.api.testFF();
+    if (!res.ffmpegOk || !res.ffprobeOk) {
+      const parts: string[] = [];
+      if (!res.ffmpegOk) parts.push(`FFmpeg error: ${res.ffmpegError || 'not found'}`);
+      if (!res.ffprobeOk) parts.push(`FFprobe error: ${res.ffprobeError || 'not found'}`);
+      show(parts.join(' | '), { type: 'error' });
+    } else {
+      show('FFmpeg and FFprobe are configured', { type: 'success' });
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-6 py-4 bg-steam-panel border-b border-slate-800">
-        <div className="text-xl font-semibold text-slate-100">Steam-like Player</div>
-        <button onClick={() => setShowSettings(true)} className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded bg-steam-card hover:bg-slate-700 text-slate-100">
-          <FaCog /> Settings
-        </button>
-        <button onClick={chooseFolder} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-steam-card hover:bg-slate-700 text-slate-100">
-          <FaFolderOpen /> Choose Folder
-        </button>
-      </div>
-
-      {/* Search and sort */}
-      <div className="px-6 py-4 flex gap-3 items-center bg-transparent">
-        <div className="flex items-center gap-2 bg-steam-panel rounded px-3 py-2 w-full max-w-lg">
-          <FaSearch className="text-slate-400" />
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search your library"
-            className="bg-transparent outline-none w-full text-slate-200 placeholder:text-slate-500"
-          />
+    <div className="min-h-screen flex bg-[#0b0f15] text-slate-100">
+      {/* Sidebar */}
+      <div className="w-64 border-r border-slate-800 bg-steam-panel hidden md:flex md:flex-col">
+        <div className="px-4 py-4 text-lg font-semibold">Library</div>
+        <div className="px-2 pb-4 space-y-1">
+          {categories.map(cat => (
+            <button key={cat} onClick={()=>setActiveCategory(cat)} className={`w-full text-left px-3 py-2 rounded hover:bg-slate-700/60 ${activeCategory===cat?'bg-slate-700/60':''}`}>{cat}</button>
+          ))}
         </div>
-        <select
-          value={sort}
-          onChange={e => setSort(e.target.value as SortKey)}
-          className="bg-steam-panel text-slate-200 rounded px-3 py-2 border border-slate-800"
-        >
-          <option value="recent">Recently Added</option>
-          <option value="name">Name</option>
-          <option value="size">Size</option>
-        </select>
-        <div className="text-slate-400 text-sm truncate max-w-[40%]" title={folder}>{folder}</div>
+        <div className="mt-auto p-3 space-y-2">
+          <button onClick={() => setShowSettings(true)} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
+            <FaCog /> Settings
+          </button>
+          <button onClick={chooseFolder} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
+            <FaFolderOpen /> Choose Folder
+          </button>
+          <button onClick={testFF} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Test FFmpeg</button>
+        </div>
       </div>
 
-      {/* Grid */}
-      <div className="px-6 pb-10 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar / hero */}
+        <div className="px-6 pt-4 pb-6 border-b border-slate-800 bg-gradient-to-b from-steam-panel to-transparent">
+          <div className="flex items-center gap-3">
+            <div className="text-2xl font-bold tracking-tight">Steam-like Player</div>
+            <div className="ml-auto flex gap-2 md:hidden">
+              <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
+                <FaCog />
+              </button>
+              <button onClick={chooseFolder} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
+                <FaFolderOpen />
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 flex gap-3 items-center">
+            <div className="flex items-center gap-2 bg-steam-panel rounded px-3 py-2 w-full max-w-xl">
+              <FaSearch className="text-slate-400" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search your library"
+                className="bg-transparent outline-none w-full text-slate-200 placeholder:text-slate-500"
+              />
+            </div>
+            <select
+              value={sort}
+              onChange={e => setSort(e.target.value as SortKey)}
+              className="bg-steam-panel text-slate-200 rounded px-3 py-2 border border-slate-800"
+            >
+              <option value="recent">Recently Added</option>
+              <option value="name">Name</option>
+              <option value="size">Size</option>
+            </select>
+            <div className="text-slate-400 text-sm truncate max-w-[40%] hidden md:block" title={folder}>{folder}</div>
+          </div>
+        </div>
+
+        {/* Grid */}
+        <div ref={gridRef} className="px-6 pb-10 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
         {filtered.map(v => (
-          <div key={v.path} className="group rounded-lg overflow-hidden bg-gradient-to-b from-steam-card to-steam-panel border border-slate-800 shadow hover:shadow-xl transition-shadow">
+          <div key={v.path} data-path={v.path} className="group rounded-lg overflow-hidden bg-gradient-to-b from-steam-card to-steam-panel border border-slate-800 shadow hover:shadow-xl transition-all">
             <div className="aspect-video bg-slate-900/60 overflow-hidden relative">
-              {v.thumb ? <img src={v.thumb} alt="thumb" className="w-full h-full object-cover" /> : null}
+              {v.thumb ? <img src={v.thumb} alt="thumb" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" /> : <div className="w-full h-full animate-pulse bg-slate-800/50" />}
               {history[v.path] ? <div className="absolute top-2 left-2 text-[11px] px-2 py-0.5 rounded bg-black/60 border border-white/10">Recently watched</div> : null}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <div className="p-3">
               <div className="font-semibold text-slate-100 truncate" title={v.name}>{v.name}</div>
@@ -149,7 +210,7 @@ const App: React.FC = () => {
         {filtered.length === 0 && (
           <div className="text-slate-400">No videos found in this folder. Click "Choose Folder" to select another directory.</div>
         )}
-      </div>
+        </div>
 
       {/* Recently Watched */}
       {Object.keys(history).length > 0 && (
@@ -190,8 +251,15 @@ const App: React.FC = () => {
         onClose={() => setShowSettings(false)}
         onSaved={() => refreshMeta()}
       />
+      </div>
     </div>
   );
 };
+
+const App: React.FC = () => (
+  <ToastProvider>
+    <Library />
+  </ToastProvider>
+);
 
 export default App;

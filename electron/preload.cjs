@@ -13,6 +13,7 @@ const api = {
   selectFile: (filters) => ipcRenderer.invoke('dialog:selectFile', filters),
   getFFPaths: () => ipcRenderer.invoke('store:getFFPaths'),
   setFFPaths: (v) => ipcRenderer.invoke('store:setFFPaths', v),
+  testFF: () => ipcRenderer.invoke('ff:test'),
 };
 
 contextBridge.exposeInMainWorld('api', api);
