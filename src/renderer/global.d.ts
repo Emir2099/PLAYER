@@ -23,5 +23,7 @@ declare interface Window {
     getFFPaths: () => Promise<{ ffmpegPath?: string; ffprobePath?: string }>;
     setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
     testFF: () => Promise<{ ffmpegOk: boolean; ffprobeOk: boolean; ffmpegError?: string; ffprobeError?: string }>;
+    addWatchTime: (filePath: string, seconds: number) => Promise<boolean>;
+    getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number }>;
   };
 }

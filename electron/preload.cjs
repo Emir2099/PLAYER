@@ -14,6 +14,8 @@ const api = {
   getFFPaths: () => ipcRenderer.invoke('store:getFFPaths'),
   setFFPaths: (v) => ipcRenderer.invoke('store:setFFPaths', v),
   testFF: () => ipcRenderer.invoke('ff:test'),
+  addWatchTime: (p, s) => ipcRenderer.invoke('history:addWatchTime', p, s),
+  getWatchStats: (p) => ipcRenderer.invoke('history:getStats', p),
 };
 
 contextBridge.exposeInMainWorld('api', api);

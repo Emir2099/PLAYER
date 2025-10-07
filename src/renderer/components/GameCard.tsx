@@ -44,42 +44,7 @@ const GameCard: React.FC<GameCardProps> = ({ title, cover, meta, watched, onPlay
         <div className="absolute inset-0 bg-[radial-gradient(90%_60%_at_50%_120%,rgba(0,0,0,0.6),rgba(0,0,0,0))]" />
         <div className="card-shine" />
       </div>
-      {/* Hover info tile (Steam-like) */}
-      {infoPosition === 'top' ? (
-        <div className="absolute top-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="max-w-[85%] rounded-md overflow-hidden border border-black/50 shadow-lg bg-gradient-to-b from-[#5c6673]/90 to-[#424a55]/90 text-[#e8edf2]">
-            {/* Header */}
-            <div className="px-3 py-2 text-[12px] font-semibold bg-gradient-to-b from-[#7a8491]/80 to-transparent border-b border-black/40 line-clamp-1">
-              {title}
-            </div>
-            {/* Body */}
-            <div className="p-3 flex gap-3 items-start">
-              <div className="w-[96px] shrink-0 rounded overflow-hidden bg-black/30 border border-black/40">
-                {overlayThumb || cover ? (
-                  <img src={overlayThumb || cover!} alt="thumb" className="w-full h-[54px] object-cover" />
-                ) : (
-                  <div className="w-full h-[54px] bg-slate-700/40" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="text-[10px] tracking-widest font-semibold text-white/75">DETAILS</div>
-                <div className="mt-1 space-y-0.5 text-[11px] text-white/90">
-                  {(overlayDetails && overlayDetails.length ? overlayDetails : [meta]).filter(Boolean).slice(0,3).map((line, i) => (
-                    <div key={i} className="line-clamp-1">{line as string}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <div className="mx-6 rounded-md overflow-hidden bg-black/50 backdrop-blur border border-white/10 shadow p-3 text-center">
-            <div className="text-[13px] font-semibold mb-1 line-clamp-2">{title}</div>
-            {meta && (<div className="text-[11px] text-slate-300/90 line-clamp-2">{meta}</div>)}
-          </div>
-        </div>
-      )}
+      {/* In-card info overlay removed in favor of side HoverOverlay */}
       {/* Bottom bar */}
       <div className="absolute inset-x-0 bottom-0 p-3">
         <div className="text-[13px] font-semibold tracking-wide drop-shadow-[0_2px_1px_rgba(0,0,0,0.6)] line-clamp-2">

@@ -24,6 +24,8 @@ type Api = {
   getFFPaths: () => Promise<{ ffmpegPath?: string; ffprobePath?: string }>;
   setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
   testFF: () => Promise<{ ffmpegOk: boolean; ffprobeOk: boolean; ffmpegError?: string; ffprobeError?: string }>;
+  addWatchTime: (filePath: string, seconds: number) => Promise<boolean>;
+  getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number }>;
 };
 
 const api: Api = {
@@ -40,6 +42,8 @@ const api: Api = {
   getFFPaths: () => ipcRenderer.invoke('store:getFFPaths'),
   setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => ipcRenderer.invoke('store:setFFPaths', v),
   testFF: () => ipcRenderer.invoke('ff:test'),
+  addWatchTime: (p: string, s: number) => ipcRenderer.invoke('history:addWatchTime', p, s),
+  getWatchStats: (p: string) => ipcRenderer.invoke('history:getStats', p),
 };
 
 declare global {

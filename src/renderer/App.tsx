@@ -54,7 +54,8 @@ const Library: React.FC = () => {
   const ioRef = useRef<IntersectionObserver | null>(null);
   const { show } = useToast();
   const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
-  const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[] } | null>(null);
+  const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[]; path?: string } | null>(null);
+  const watchTimerRef = useRef<{ path: string; lastTick: number } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -199,16 +200,20 @@ const Library: React.FC = () => {
           <div
             key={v.path}
             data-path={v.path}
-            onMouseEnter={(e) => {
+            onMouseEnter={async (e) => {
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
               setHoverRect(rect);
+              const stats = await window.api.getWatchStats(v.path);
+              const total = Math.round(stats.totalMinutes);
+              const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
               setHoverPayload({
                 title: v.name,
                 thumb: v.thumb,
                 lines: [
-                  'Last two weeks: 0 min',
-                  'Total: 0 min',
+                  `Last watched: ${last}`,
+                  `Total: ${total} min`,
                 ],
+                path: v.path,
               });
             }}
             onMouseLeave={() => { setHoverRect(null); setHoverPayload(null); }}
@@ -277,7 +282,28 @@ const Library: React.FC = () => {
               <button onClick={() => setSelected(null)} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">Close</button>
             </div>
             <div className="bg-black">
-              <video src={fileUrl(selected.path)} controls autoPlay className="w-full max-h-[70vh]" onPlay={() => window.api.markWatched(selected.path)} />
+              <video
+                src={fileUrl(selected.path)}
+                controls
+                autoPlay
+                className="w-full max-h-[70vh]"
+                onPlay={() => {
+                  window.api.markWatched(selected.path);
+                  watchTimerRef.current = { path: selected.path, lastTick: Date.now() };
+                }}
+                onPause={() => {
+                  const t = watchTimerRef.current; if (!t) return;
+                  const sec = Math.round((Date.now() - t.lastTick) / 1000);
+                  if (sec > 0) window.api.addWatchTime(t.path, sec);
+                  watchTimerRef.current = null;
+                }}
+                onEnded={() => {
+                  const t = watchTimerRef.current; if (!t) return;
+                  const sec = Math.round((Date.now() - t.lastTick) / 1000);
+                  if (sec > 0) window.api.addWatchTime(t.path, sec);
+                  watchTimerRef.current = null;
+                }}
+              />
             </div>
           </div>
         </div>

@@ -30,7 +30,8 @@ if (ffprobeStatic?.path) try { ffmpeg.setFfprobePath(ffprobeStatic.path); } catc
 // Store
 type Settings = {
   lastFolder?: string;
-  watched?: Record<string, number>; // path -> last watched timestamp
+  watched?: Record<string, number>; // DEPRECATED: last watched timestamp
+  watchStats?: Record<string, { lastWatched: number; totalMinutes: number }>;
   ffmpegPath?: string;
   ffprobePath?: string;
 };
@@ -369,6 +370,31 @@ ipcMain.handle('history:mark', (_e, filePath: string) => {
     const map = (store.get('watched') as Record<string, number>) || {};
     map[filePath] = Date.now();
     store.set('watched', map);
+    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number }>) || {};
+    const entry = stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
+    entry.lastWatched = Date.now();
+    stats[filePath] = entry;
+    store.set('watchStats', stats);
     return true;
   } catch { return false; }
+});
+
+ipcMain.handle('history:addWatchTime', (_e, filePath: string, seconds: number) => {
+  try {
+    if (!Number.isFinite(seconds) || seconds <= 0) return false;
+    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number }>) || {};
+    const entry = stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
+    entry.totalMinutes += seconds / 60;
+    entry.lastWatched = Date.now();
+    stats[filePath] = entry;
+    store.set('watchStats', stats);
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle('history:getStats', (_e, filePath: string) => {
+  try {
+    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number }>) || {};
+    return stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
+  } catch { return { lastWatched: 0, totalMinutes: 0 }; }
 });
