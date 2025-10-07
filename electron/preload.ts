@@ -20,6 +20,9 @@ type Api = {
   setLastFolder: (dir: string) => Promise<boolean>;
   getHistory: () => Promise<Record<string, number>>;
   markWatched: (filePath: string) => Promise<boolean>;
+  selectFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
+  getFFPaths: () => Promise<{ ffmpegPath?: string; ffprobePath?: string }>;
+  setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
 };
 
 const api: Api = {
@@ -32,6 +35,9 @@ const api: Api = {
   setLastFolder: (dir: string) => ipcRenderer.invoke('store:setLastFolder', dir),
   getHistory: () => ipcRenderer.invoke('history:get'),
   markWatched: (p: string) => ipcRenderer.invoke('history:mark', p),
+  selectFile: (filters?: Array<{ name: string; extensions: string[] }>) => ipcRenderer.invoke('dialog:selectFile', filters),
+  getFFPaths: () => ipcRenderer.invoke('store:getFFPaths'),
+  setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => ipcRenderer.invoke('store:setFFPaths', v),
 };
 
 declare global {

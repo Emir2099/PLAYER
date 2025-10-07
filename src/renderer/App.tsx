@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt } from 'react-icons/fa';
+import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog } from 'react-icons/fa';
+import SettingsModal from './components/SettingsModal';
 
 // Types mirrored from preload
 export type VideoItem = {
@@ -35,6 +36,7 @@ const App: React.FC = () => {
   const [sort, setSort] = useState<SortKey>('recent');
   const [selected, setSelected] = useState<VideoItem | null>(null);
   const [history, setHistory] = useState<Record<string, number>>({});
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -73,9 +75,13 @@ const App: React.FC = () => {
       await window.api.setLastFolder(sel);
       const items = await window.api.scanVideos(sel, { recursive: true, depth: 3 });
       setVideos(items);
-      for (const v of items.slice(0, 24)) {
-        window.api.getMeta(v.path).then(meta => setVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p)));
-      }
+      refreshMeta(items);
+    }
+  };
+
+  const refreshMeta = (items: VideoItem[] = videos) => {
+    for (const v of items.slice(0, 24)) {
+      window.api.getMeta(v.path).then(meta => setVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p)));
     }
   };
 
@@ -84,7 +90,10 @@ const App: React.FC = () => {
       {/* Top bar */}
       <div className="flex items-center gap-3 px-6 py-4 bg-steam-panel border-b border-slate-800">
         <div className="text-xl font-semibold text-slate-100">Steam-like Player</div>
-        <button onClick={chooseFolder} className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded bg-steam-card hover:bg-slate-700 text-slate-100">
+        <button onClick={() => setShowSettings(true)} className="ml-auto inline-flex items-center gap-2 px-3 py-2 rounded bg-steam-card hover:bg-slate-700 text-slate-100">
+          <FaCog /> Settings
+        </button>
+        <button onClick={chooseFolder} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-steam-card hover:bg-slate-700 text-slate-100">
           <FaFolderOpen /> Choose Folder
         </button>
       </div>
@@ -175,6 +184,12 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      <SettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSaved={() => refreshMeta()}
+      />
     </div>
   );
 };

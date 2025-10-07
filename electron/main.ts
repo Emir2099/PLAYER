@@ -22,7 +22,7 @@ let mainWindow: BrowserWindow | null = null;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure ffmpeg paths if available
+// Configure ffmpeg paths if available (static defaults)
 if (ffmpegPath) try { ffmpeg.setFfmpegPath(ffmpegPath); } catch {}
 if (ffprobeStatic?.path) try { ffmpeg.setFfprobePath(ffprobeStatic.path); } catch {}
 
@@ -30,6 +30,8 @@ if (ffprobeStatic?.path) try { ffmpeg.setFfprobePath(ffprobeStatic.path); } catc
 type Settings = {
   lastFolder?: string;
   watched?: Record<string, number>; // path -> last watched timestamp
+  ffmpegPath?: string;
+  ffprobePath?: string;
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
@@ -55,6 +57,18 @@ try {
     set: (k, v) => { (cache as any)[k] = v; save(); },
   };
 }
+
+// Apply any previously saved custom ffmpeg/ffprobe paths
+try {
+  const savedFfmpeg = store?.get?.('ffmpegPath');
+  const savedFfprobe = store?.get?.('ffprobePath');
+  if (typeof savedFfmpeg === 'string' && savedFfmpeg) {
+    try { ffmpeg.setFfmpegPath(savedFfmpeg); } catch {}
+  }
+  if (typeof savedFfprobe === 'string' && savedFfprobe) {
+    try { ffmpeg.setFfprobePath(savedFfprobe); } catch {}
+  }
+} catch {}
 
 function getPreloadPath() {
   // Use CommonJS preload to avoid ESM import issue in sandbox
@@ -170,7 +184,8 @@ function hashPath(p: string) {
 async function getVideoMeta(filePath: string): Promise<{ duration?: number; thumb?: string | null }> {
   let duration: number | undefined;
   let thumb: string | null = null;
-  if (ffmpeg && ffprobeStatic?.path) {
+  // Try to read duration using ffprobe if available via configured path or PATH
+  if (ffmpeg) {
     duration = await new Promise<number | undefined>((resolve) => {
       try {
         ffmpeg.ffprobe(filePath, (err: any, data: any) => {
@@ -183,7 +198,7 @@ async function getVideoMeta(filePath: string): Promise<{ duration?: number; thum
     });
   }
   // thumbnail
-  if (ffmpeg && ffmpegPath && ffprobeStatic?.path) {
+  if (ffmpeg) {
     const tdir = getThumbDir();
     await ensureDir(tdir);
     const name = hashPath(filePath) + '.jpg';
@@ -245,6 +260,20 @@ ipcMain.handle('dialog:selectFolder', async () => {
   }
 });
 
+ipcMain.handle('dialog:selectFile', async (_e, filters?: Array<{ name: string; extensions: string[] }>) => {
+  const options = {
+    title: 'Select a file',
+    properties: ['openFile'] as ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles' | 'createDirectory' | 'promptToCreate' | 'noResolveAliases' | 'treatPackageAsDirectory' | 'dontAddToRecent')[],
+    filters: filters ?? [{ name: 'Executable', extensions: ['exe'] }],
+  };
+  const parent = BrowserWindow.getFocusedWindow();
+  const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+  if (!res.canceled && res.filePaths.length > 0) return res.filePaths[0];
+  const syncRes = parent ? dialog.showOpenDialogSync(parent, options) : dialog.showOpenDialogSync(options);
+  if (syncRes && syncRes.length > 0) return syncRes[0];
+  return null;
+});
+
 ipcMain.handle('fs:scanVideos', async (_e, dir: string, opts?: ScanOptions) => {
   if (!dir || !existsSync(dir)) return [];
   return await scanDirectory(dir, opts);
@@ -258,6 +287,27 @@ ipcMain.handle('revealInExplorer', async (_e, filePath: string) => {
     return true;
   }
   return false;
+});
+
+ipcMain.handle('store:getFFPaths', () => {
+  try {
+    return {
+      ffmpegPath: store.get('ffmpegPath'),
+      ffprobePath: store.get('ffprobePath'),
+    };
+  } catch {
+    return { ffmpegPath: undefined, ffprobePath: undefined };
+  }
+});
+
+ipcMain.handle('store:setFFPaths', async (_e, val: { ffmpegPath?: string; ffprobePath?: string }) => {
+  try {
+    if (val.ffmpegPath) { store.set('ffmpegPath', val.ffmpegPath); try { ffmpeg.setFfmpegPath(val.ffmpegPath); } catch {} }
+    if (val.ffprobePath) { store.set('ffprobePath', val.ffprobePath); try { ffmpeg.setFfprobePath(val.ffprobePath); } catch {} }
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle('video:getMeta', async (_e, filePath: string) => {

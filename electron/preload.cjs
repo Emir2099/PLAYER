@@ -10,6 +10,9 @@ const api = {
   setLastFolder: (dir) => ipcRenderer.invoke('store:setLastFolder', dir),
   getHistory: () => ipcRenderer.invoke('history:get'),
   markWatched: (p) => ipcRenderer.invoke('history:mark', p),
+  selectFile: (filters) => ipcRenderer.invoke('dialog:selectFile', filters),
+  getFFPaths: () => ipcRenderer.invoke('store:getFFPaths'),
+  setFFPaths: (v) => ipcRenderer.invoke('store:setFFPaths', v),
 };
 
 contextBridge.exposeInMainWorld('api', api);
