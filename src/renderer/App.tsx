@@ -54,8 +54,11 @@ const Library: React.FC = () => {
   const ioRef = useRef<IntersectionObserver | null>(null);
   const { show } = useToast();
   const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
-  const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[]; path?: string } | null>(null);
+  const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[]; path?: string; lastPositionSec?: number } | null>(null);
+  const [appSettings, setAppSettings] = useState<{ enableHoverPreviews: boolean }>({ enableHoverPreviews: true });
+  const hoverDelayRef = useRef<number | null>(null);
   const watchTimerRef = useRef<{ path: string; lastTick: number } | null>(null);
+  const posSaveTickRef = useRef<number>(0);
 
   useEffect(() => {
     (async () => {
@@ -63,6 +66,7 @@ const Library: React.FC = () => {
       const base = last && last.length ? last : await window.api.homeDir();
       setFolder(base);
       setHistory(await window.api.getHistory());
+      try { setAppSettings(await window.api.getAppSettings()); } catch {}
       const items = await window.api.scanVideos(base, { recursive: true, depth: 3 });
       setVideos(items);
       refreshMeta(items);
@@ -202,23 +206,27 @@ const Library: React.FC = () => {
             data-path={v.path}
             onMouseEnter={async (e) => {
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              setHoverRect(rect);
-              const stats = await window.api.getWatchStats(v.path);
-              const total = Math.round(stats.totalMinutes);
-              const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
-              const last14 = stats.last14Minutes ?? 0;
-              setHoverPayload({
-                title: v.name,
-                thumb: v.thumb,
-                lines: [
-                  `Last watched: ${last}`,
-                  `Last two weeks: ${last14} min`,
-                  `Total: ${total} min`,
-                ],
-                path: v.path,
-              });
+              if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current);
+              hoverDelayRef.current = window.setTimeout(async () => {
+                setHoverRect(rect);
+                const stats = await window.api.getWatchStats(v.path);
+                const total = Math.round(stats.totalMinutes);
+                const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
+                const last14 = stats.last14Minutes ?? 0;
+                setHoverPayload({
+                  title: v.name,
+                  thumb: v.thumb,
+                  lines: [
+                    `Last watched: ${last}`,
+                    `Last two weeks: ${last14} min`,
+                    `Total: ${total} min`,
+                  ],
+                  path: v.path,
+                  lastPositionSec: stats.lastPositionSec,
+                });
+              }, 150);
             }}
-            onMouseLeave={() => { setHoverRect(null); setHoverPayload(null); }}
+            onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
           >
             <GameCard
               title={v.name}
@@ -251,7 +259,8 @@ const Library: React.FC = () => {
           anchorRect={hoverRect || undefined}
           title={hoverPayload?.title || ''}
           thumb={hoverPayload?.thumb}
-          srcPath={hoverPayload?.path}
+          srcPath={appSettings.enableHoverPreviews ? hoverPayload?.path : undefined}
+          startAtSec={hoverPayload?.lastPositionSec}
           lines={hoverPayload?.lines || []}
           width={260}
           offset={12}
@@ -294,16 +303,36 @@ const Library: React.FC = () => {
                   window.api.markWatched(selected.path);
                   watchTimerRef.current = { path: selected.path, lastTick: Date.now() };
                 }}
-                onPause={() => {
+                onTimeUpdate={(e) => {
+                  try {
+                    const v = e.currentTarget as HTMLVideoElement;
+                    if (v && Number.isFinite(v.currentTime)) {
+                      // Save last position every ~5 seconds to avoid excessive writes
+                      const now = Date.now();
+                      if (now - posSaveTickRef.current > 5000) {
+                        if (watchTimerRef.current?.path) {
+                          window.api.setLastPosition(watchTimerRef.current.path, v.currentTime);
+                        }
+                        posSaveTickRef.current = now;
+                      }
+                    }
+                  } catch {}
+                }}
+                onPause={(e) => {
                   const t = watchTimerRef.current; if (!t) return;
                   const sec = Math.round((Date.now() - t.lastTick) / 1000);
                   if (sec > 0) window.api.addWatchTime(t.path, sec);
+                  try {
+                    const v = e.currentTarget as HTMLVideoElement;
+                    if (Number.isFinite(v.currentTime)) window.api.setLastPosition(t.path, v.currentTime);
+                  } catch {}
                   watchTimerRef.current = null;
                 }}
                 onEnded={() => {
                   const t = watchTimerRef.current; if (!t) return;
                   const sec = Math.round((Date.now() - t.lastTick) / 1000);
                   if (sec > 0) window.api.addWatchTime(t.path, sec);
+                  try { window.api.setLastPosition(t.path, 0); } catch {}
                   watchTimerRef.current = null;
                 }}
               />

@@ -8,6 +8,8 @@ export type HoverOverlayProps = {
   thumb?: string | null;
   // Local file path used to play a silent preview in the header area
   srcPath?: string;
+  // Optional starting time (seconds) to start the preview from
+  startAtSec?: number;
   lines?: string[];
   width?: number; // px
   offset?: number; // px
@@ -19,7 +21,7 @@ function fileUrl(p?: string) {
   return 'file:///' + encodeURI(normalized);
 }
 
-const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, thumb, srcPath, lines = [], width = 260, offset = 12 }) => {
+const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, thumb, srcPath, startAtSec, lines = [], width = 260, offset = 12 }) => {
   const pos = useMemo(() => {
     if (!open || !anchorRect) return null;
     const vw = window.innerWidth;
@@ -64,9 +66,10 @@ const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, th
                   try {
                     const v = vidRef.current;
                     if (v && Number.isFinite(v.duration) && v.duration > 0) {
-                      // Start a bit in to avoid black frames; cap to 20% of duration or 10s max
-                      const offset = Math.min(10, Math.max(0, v.duration * 0.2));
-                      v.currentTime = offset;
+                      // Prefer the provided start position (last watched), otherwise start from 0
+                      const suggested = (typeof startAtSec === 'number' && startAtSec > 0) ? startAtSec : 0;
+                      const clamped = Math.max(0, Math.min(v.duration - 0.5, suggested));
+                      if (Math.abs(v.currentTime - clamped) > 0.25) v.currentTime = clamped;
                     }
                   } catch {}
                 }}

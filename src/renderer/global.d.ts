@@ -24,6 +24,9 @@ declare interface Window {
     setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
     testFF: () => Promise<{ ffmpegOk: boolean; ffprobeOk: boolean; ffmpegError?: string; ffprobeError?: string }>;
     addWatchTime: (filePath: string, seconds: number) => Promise<boolean>;
-    getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number }>;
+    getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number; lastPositionSec?: number }>;
+    setLastPosition: (filePath: string, seconds: number) => Promise<boolean>;
+    getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
+    setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
   };
 }

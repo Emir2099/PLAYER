@@ -25,7 +25,10 @@ type Api = {
   setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
   testFF: () => Promise<{ ffmpegOk: boolean; ffprobeOk: boolean; ffmpegError?: string; ffprobeError?: string }>;
   addWatchTime: (filePath: string, seconds: number) => Promise<boolean>;
-  getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number }>;
+  getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number; lastPositionSec?: number }>;
+  setLastPosition: (filePath: string, seconds: number) => Promise<boolean>;
+  getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
+  setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
 };
 
 const api: Api = {
@@ -44,6 +47,9 @@ const api: Api = {
   testFF: () => ipcRenderer.invoke('ff:test'),
   addWatchTime: (p: string, s: number) => ipcRenderer.invoke('history:addWatchTime', p, s),
   getWatchStats: (p: string) => ipcRenderer.invoke('history:getStats', p),
+  setLastPosition: (p: string, s: number) => ipcRenderer.invoke('history:setLastPosition', p, s),
+  getAppSettings: () => ipcRenderer.invoke('store:getAppSettings'),
+  setAppSettings: (v: { enableHoverPreviews?: boolean }) => ipcRenderer.invoke('store:setAppSettings', v),
 };
 
 declare global {

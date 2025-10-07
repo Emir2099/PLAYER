@@ -16,6 +16,9 @@ const api = {
   testFF: () => ipcRenderer.invoke('ff:test'),
   addWatchTime: (p, s) => ipcRenderer.invoke('history:addWatchTime', p, s),
   getWatchStats: (p) => ipcRenderer.invoke('history:getStats', p),
+  setLastPosition: (p, s) => ipcRenderer.invoke('history:setLastPosition', p, s),
+  getAppSettings: () => ipcRenderer.invoke('store:getAppSettings'),
+  setAppSettings: (v) => ipcRenderer.invoke('store:setAppSettings', v),
 };
 
 contextBridge.exposeInMainWorld('api', api);

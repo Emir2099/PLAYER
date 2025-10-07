@@ -10,6 +10,7 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const [ffmpegPath, setFfmpegPath] = useState<string>('');
   const [ffprobePath, setFfprobePath] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [enableHoverPreviews, setEnableHoverPreviews] = useState<boolean>(true);
 
   useEffect(() => {
     if (!open) return;
@@ -17,6 +18,10 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
       const curr = await window.api.getFFPaths();
       setFfmpegPath(curr.ffmpegPath || '');
       setFfprobePath(curr.ffprobePath || '');
+      try {
+        const s = await window.api.getAppSettings();
+        setEnableHoverPreviews(!!s.enableHoverPreviews);
+      } catch {}
     })();
   }, [open]);
 
@@ -31,6 +36,7 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
     setSaving(true);
     try {
       await window.api.setFFPaths({ ffmpegPath: ffmpegPath || undefined, ffprobePath: ffprobePath || undefined });
+      await window.api.setAppSettings({ enableHoverPreviews });
       onSaved?.();
       onClose();
     } finally {
@@ -44,6 +50,18 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
       <div className="bg-steam-panel rounded-xl border border-slate-800 w-full max-w-xl" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-slate-800 text-lg font-semibold">Settings</div>
         <div className="p-5 space-y-5">
+          <div>
+            <label className="inline-flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={enableHoverPreviews}
+                onChange={e => setEnableHoverPreviews(e.target.checked)}
+                className="accent-steam-accent"
+              />
+              <span className="text-sm text-slate-200">Enable hover video previews</span>
+            </label>
+            <div className="text-xs text-slate-400 mt-1">When enabled, the hover panel plays a short, muted loop of the video.</div>
+          </div>
           <div>
             <div className="text-sm text-slate-300 mb-1">FFmpeg path (optional)</div>
             <div className="flex gap-2">

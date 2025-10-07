@@ -31,10 +31,11 @@ if (ffprobeStatic?.path) try { ffmpeg.setFfprobePath(ffprobeStatic.path); } catc
 type Settings = {
   lastFolder?: string;
   watched?: Record<string, number>; // DEPRECATED: last watched timestamp
-  watchStats?: Record<string, { lastWatched: number; totalMinutes: number }>;
+  watchStats?: Record<string, { lastWatched: number; totalMinutes: number; lastPositionSec?: number }>;
   watchDaily?: Record<string, Record<string, number>>; // path -> YYYY-MM-DD -> seconds
   ffmpegPath?: string;
   ffprobePath?: string;
+  enableHoverPreviews?: boolean;
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
@@ -383,7 +384,7 @@ ipcMain.handle('history:mark', (_e, filePath: string) => {
 ipcMain.handle('history:addWatchTime', (_e, filePath: string, seconds: number) => {
   try {
     if (!Number.isFinite(seconds) || seconds <= 0) return false;
-    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number }>) || {};
+    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number; lastPositionSec?: number }>) || {};
     const entry = stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
     entry.totalMinutes += seconds / 60;
     entry.lastWatched = Date.now();
@@ -401,7 +402,7 @@ ipcMain.handle('history:addWatchTime', (_e, filePath: string, seconds: number) =
 
 ipcMain.handle('history:getStats', (_e, filePath: string) => {
   try {
-    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number }>) || {};
+    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number; lastPositionSec?: number }>) || {};
     const base = stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
     const daily = (store.get('watchDaily') as Record<string, Record<string, number>>) || {};
     const map = daily[filePath] || {};
@@ -416,4 +417,34 @@ ipcMain.handle('history:getStats', (_e, filePath: string) => {
     const last14Minutes = Math.round(secSum / 60);
     return { ...base, last14Minutes } as any;
   } catch { return { lastWatched: 0, totalMinutes: 0 }; }
+});
+
+ipcMain.handle('history:setLastPosition', (_e, filePath: string, seconds: number) => {
+  try {
+    if (!Number.isFinite(seconds) || seconds < 0) return false;
+    const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number; lastPositionSec?: number }>) || {};
+    const entry = stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
+    entry.lastPositionSec = Math.max(0, Math.round(seconds));
+    stats[filePath] = entry;
+    store.set('watchStats', stats);
+    return true;
+  } catch { return false; }
+});
+
+ipcMain.handle('store:getAppSettings', () => {
+  try {
+    const enabled = store.get('enableHoverPreviews');
+    return { enableHoverPreviews: enabled === undefined ? true : !!enabled };
+  } catch {
+    return { enableHoverPreviews: true };
+  }
+});
+
+ipcMain.handle('store:setAppSettings', (_e, v: { enableHoverPreviews?: boolean }) => {
+  try {
+    if (typeof v.enableHoverPreviews === 'boolean') store.set('enableHoverPreviews', v.enableHoverPreviews);
+    return true;
+  } catch {
+    return false;
+  }
 });
