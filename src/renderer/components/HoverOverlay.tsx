@@ -32,8 +32,8 @@ const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, th
   const body = document.body;
   return createPortal(
     <div style={{ position: 'absolute', left: pos.left, top: pos.top, width }} className="z-[80]">
-      <div className="rounded-md overflow-hidden border border-black/50 shadow-2xl bg-gradient-to-b from-[#656c77]/95 to-[#424a55]/95 text-[#eef2f6]">
-        <div className="px-3 py-2 text-[12px] font-semibold bg-gradient-to-b from-[#7e8793]/85 to-transparent border-b border-black/40 line-clamp-1">
+      <div className="animate-[overlayIn_.16s_ease] will-change-transform rounded-md overflow-hidden border border-black/60 shadow-2xl bg-gradient-to-b from-[#676f7a]/95 to-[#434b56]/95 text-[#f3f6fa]">
+        <div className="px-3 py-2 text-[12px] font-semibold bg-gradient-to-b from-[#8a93a0]/85 to-transparent border-b border-black/50 whitespace-nowrap overflow-hidden text-ellipsis">
           {title}
         </div>
         <div className="p-3">
@@ -45,7 +45,7 @@ const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, th
             )}
           </div>
           <div className="mt-3">
-            <div className="text-[10px] tracking-widest font-semibold text-white/80 mb-1">TIME PLAYED</div>
+            <div className="text-[10px] tracking-widest font-semibold text-white/85 mb-1">TIME PLAYED</div>
             <div className="space-y-0.5 text-[11px] text-white/90">
               {(lines.length ? lines : ['Last two weeks: 0 min', 'Total: 0 min']).slice(0, 3).map((l, i) => (
                 <div className="line-clamp-1" key={i}>{l}</div>

@@ -25,7 +25,7 @@ type Api = {
   setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
   testFF: () => Promise<{ ffmpegOk: boolean; ffprobeOk: boolean; ffmpegError?: string; ffprobeError?: string }>;
   addWatchTime: (filePath: string, seconds: number) => Promise<boolean>;
-  getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number }>;
+  getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number }>;
 };
 
 const api: Api = {

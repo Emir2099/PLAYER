@@ -206,11 +206,13 @@ const Library: React.FC = () => {
               const stats = await window.api.getWatchStats(v.path);
               const total = Math.round(stats.totalMinutes);
               const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
+              const last14 = stats.last14Minutes ?? 0;
               setHoverPayload({
                 title: v.name,
                 thumb: v.thumb,
                 lines: [
                   `Last watched: ${last}`,
+                  `Last two weeks: ${last14} min`,
                   `Total: ${total} min`,
                 ],
                 path: v.path,

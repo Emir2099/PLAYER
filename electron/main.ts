@@ -32,6 +32,7 @@ type Settings = {
   lastFolder?: string;
   watched?: Record<string, number>; // DEPRECATED: last watched timestamp
   watchStats?: Record<string, { lastWatched: number; totalMinutes: number }>;
+  watchDaily?: Record<string, Record<string, number>>; // path -> YYYY-MM-DD -> seconds
   ffmpegPath?: string;
   ffprobePath?: string;
 };
@@ -388,6 +389,12 @@ ipcMain.handle('history:addWatchTime', (_e, filePath: string, seconds: number) =
     entry.lastWatched = Date.now();
     stats[filePath] = entry;
     store.set('watchStats', stats);
+    const daily = (store.get('watchDaily') as Record<string, Record<string, number>>) || {};
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const map = daily[filePath] || {};
+    map[dayKey] = (map[dayKey] || 0) + Math.round(seconds);
+    daily[filePath] = map;
+    store.set('watchDaily', daily);
     return true;
   } catch { return false; }
 });
@@ -395,6 +402,18 @@ ipcMain.handle('history:addWatchTime', (_e, filePath: string, seconds: number) =
 ipcMain.handle('history:getStats', (_e, filePath: string) => {
   try {
     const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number }>) || {};
-    return stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
+    const base = stats[filePath] || { lastWatched: 0, totalMinutes: 0 };
+    const daily = (store.get('watchDaily') as Record<string, Record<string, number>>) || {};
+    const map = daily[filePath] || {};
+    let secSum = 0;
+    const today = new Date();
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      secSum += map[key] || 0;
+    }
+    const last14Minutes = Math.round(secSum / 60);
+    return { ...base, last14Minutes } as any;
   } catch { return { lastWatched: 0, totalMinutes: 0 }; }
 });
