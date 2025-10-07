@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog } from 'react-icons/fa';
 import SettingsModal from './components/SettingsModal';
 import { ToastProvider, useToast } from './components/Toast';
+import GameCard from './components/GameCard';
 
 // Types mirrored from preload
 export type VideoItem = {
@@ -182,29 +183,17 @@ const Library: React.FC = () => {
         </div>
 
         {/* Grid */}
-        <div ref={gridRef} className="px-6 pb-10 grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+        <div ref={gridRef} className="px-6 pb-10 grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
         {filtered.map(v => (
-          <div key={v.path} data-path={v.path} className="group rounded-lg overflow-hidden bg-gradient-to-b from-steam-card to-steam-panel border border-slate-800 shadow hover:shadow-xl transition-all">
-            <div className="aspect-video bg-slate-900/60 overflow-hidden relative">
-              {v.thumb ? <img src={v.thumb} alt="thumb" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" /> : <div className="w-full h-full animate-pulse bg-slate-800/50" />}
-              {history[v.path] ? <div className="absolute top-2 left-2 text-[11px] px-2 py-0.5 rounded bg-black/60 border border-white/10">Recently watched</div> : null}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="p-3">
-              <div className="font-semibold text-slate-100 truncate" title={v.name}>{v.name}</div>
-              <div className="text-xs text-slate-400 mt-1">{v.ext.toUpperCase()} • {formatBytes(v.size)}{typeof v.duration === 'number' ? ` • ${v.duration} s` : ''}</div>
-              <div className="flex gap-2 mt-3">
-                <button onClick={() => setSelected(v)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-steam-accent/90 hover:bg-steam-accent text-white text-sm">
-                  <FaPlay /> Play
-                </button>
-                <button onClick={() => window.api.revealInExplorer(v.path)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm">
-                  <FaExternalLinkAlt /> Show in Folder
-                </button>
-                <div className="ml-auto text-slate-500 self-center" title={new Date(v.mtime).toLocaleString()}>
-                  <FaInfoCircle />
-                </div>
-              </div>
-            </div>
+          <div key={v.path} data-path={v.path}>
+            <GameCard
+              title={v.name}
+              cover={v.thumb}
+              meta={`${v.ext.toUpperCase()} • ${formatBytes(v.size)}${typeof v.duration === 'number' ? ` • ${v.duration}s` : ''}`}
+              watched={!!history[v.path]}
+              onPlay={() => setSelected(v)}
+              onClick={() => setSelected(v)}
+            />
           </div>
         ))}
         {filtered.length === 0 && (
