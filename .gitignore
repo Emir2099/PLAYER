@@ -1,0 +1,66 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# Build outputs
+dist/
+build/
+release/
+out/
+.temp/
+.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Electron compiled JS from TS (keep manual preload.cjs)
+electron/*.js
+!electron/preload.cjs
+electron/*.js.map
+
+# VS Code
+.vscode/
+.history/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Coverage
+coverage/
+
+# Env files
+.env
+.env.*.local
+
+# Misc
+*.local
+*.swp
+*.swo
+# Node
+node_modules/
+dist/
+.out/
+.DS_Store
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite
+.vite/
+
+# VS Code
+.vscode/
+
+# Build artifacts
+release/
+/build

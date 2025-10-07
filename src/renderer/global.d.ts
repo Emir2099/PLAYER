@@ -1,0 +1,23 @@
+type RenderVideoItem = {
+  path: string;
+  name: string;
+  size: number;
+  mtime: number;
+  ext: string;
+  duration?: number;
+  thumb?: string | null;
+};
+
+declare interface Window {
+  api: {
+    selectFolder: () => Promise<string | null>;
+    scanVideos: (dir: string, opts?: { recursive?: boolean; depth?: number }) => Promise<RenderVideoItem[]>;
+    homeDir: () => Promise<string>;
+    revealInExplorer: (filePath: string) => Promise<boolean>;
+    getMeta: (filePath: string) => Promise<{ duration?: number; thumb?: string | null }>;
+    getLastFolder: () => Promise<string | undefined>;
+    setLastFolder: (dir: string) => Promise<boolean>;
+    getHistory: () => Promise<Record<string, number>>;
+    markWatched: (filePath: string) => Promise<boolean>;
+  };
+}

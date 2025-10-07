@@ -1,0 +1,15 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+const api = {
+  selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
+  scanVideos: (dir, opts) => ipcRenderer.invoke('fs:scanVideos', dir, opts),
+  homeDir: () => ipcRenderer.invoke('os:home'),
+  revealInExplorer: (p) => ipcRenderer.invoke('revealInExplorer', p),
+  getMeta: (p) => ipcRenderer.invoke('video:getMeta', p),
+  getLastFolder: () => ipcRenderer.invoke('store:getLastFolder'),
+  setLastFolder: (dir) => ipcRenderer.invoke('store:setLastFolder', dir),
+  getHistory: () => ipcRenderer.invoke('history:get'),
+  markWatched: (p) => ipcRenderer.invoke('history:mark', p),
+};
+
+contextBridge.exposeInMainWorld('api', api);
