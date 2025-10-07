@@ -31,6 +31,14 @@ function fileUrl(p: string) {
   return 'file:///' + encodeURI(normalized);
 }
 
+function formatDuration(sec?: number) {
+  if (!sec || !Number.isFinite(sec)) return undefined;
+  const s = Math.max(0, Math.round(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
+
 const Library: React.FC = () => {
   const [folder, setFolder] = useState<string>('');
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -183,14 +191,25 @@ const Library: React.FC = () => {
         </div>
 
         {/* Grid */}
-        <div ref={gridRef} className="px-6 pb-10 grid gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+        <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
         {filtered.map(v => (
           <div key={v.path} data-path={v.path}>
             <GameCard
               title={v.name}
               cover={v.thumb}
-              meta={`${v.ext.toUpperCase()} • ${formatBytes(v.size)}${typeof v.duration === 'number' ? ` • ${v.duration}s` : ''}`}
+              meta={[
+                v.ext.toUpperCase(),
+                formatBytes(v.size),
+                formatDuration(v.duration),
+                new Date(v.mtime).toLocaleDateString(),
+              ].filter(Boolean).join(' • ')}
               watched={!!history[v.path]}
+              overlayThumb={v.thumb}
+              overlayDetails={[
+                'FILE INFO',
+                `${v.ext.toUpperCase()} • ${formatBytes(v.size)}`,
+                formatDuration(v.duration) ? `Duration: ${formatDuration(v.duration)}` : undefined,
+              ].filter(Boolean) as string[]}
               onPlay={() => setSelected(v)}
               onClick={() => setSelected(v)}
             />
