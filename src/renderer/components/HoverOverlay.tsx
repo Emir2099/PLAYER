@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export type HoverOverlayProps = {
@@ -6,12 +6,20 @@ export type HoverOverlayProps = {
   anchorRect?: DOMRect | null;
   title: string;
   thumb?: string | null;
+  // Local file path used to play a silent preview in the header area
+  srcPath?: string;
   lines?: string[];
   width?: number; // px
   offset?: number; // px
 };
 
-const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, thumb, lines = [], width = 260, offset = 12 }) => {
+function fileUrl(p?: string) {
+  if (!p) return undefined;
+  const normalized = p.replace(/\\/g, '/');
+  return 'file:///' + encodeURI(normalized);
+}
+
+const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, thumb, srcPath, lines = [], width = 260, offset = 12 }) => {
   const pos = useMemo(() => {
     if (!open || !anchorRect) return null;
     const vw = window.innerWidth;
@@ -28,6 +36,10 @@ const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, th
     return { left: Math.round(left + window.scrollX), top: Math.round(top + window.scrollY) };
   }, [open, anchorRect, width, offset]);
 
+  const videoUrl = useMemo(() => fileUrl(srcPath), [srcPath]);
+  const [videoErrored, setVideoErrored] = useState(false);
+  const vidRef = useRef<HTMLVideoElement | null>(null);
+
   if (!open || !pos) return null;
   const body = document.body;
   return createPortal(
@@ -38,7 +50,30 @@ const HoverOverlay: React.FC<HoverOverlayProps> = ({ open, anchorRect, title, th
         </div>
         <div className="p-3">
           <div className="rounded overflow-hidden border border-black/40 bg-black/30">
-            {thumb ? (
+            {videoUrl && !videoErrored ? (
+              <video
+                ref={vidRef}
+                src={videoUrl}
+                className="w-full h-[84px] object-cover"
+                muted
+                playsInline
+                autoPlay
+                loop
+                preload="metadata"
+                onLoadedMetadata={() => {
+                  try {
+                    const v = vidRef.current;
+                    if (v && Number.isFinite(v.duration) && v.duration > 0) {
+                      // Start a bit in to avoid black frames; cap to 20% of duration or 10s max
+                      const offset = Math.min(10, Math.max(0, v.duration * 0.2));
+                      v.currentTime = offset;
+                    }
+                  } catch {}
+                }}
+                onError={() => setVideoErrored(true)}
+                poster={thumb || undefined}
+              />
+            ) : thumb ? (
               <img src={thumb} alt="thumb" className="w-full h-[84px] object-cover" />
             ) : (
               <div className="w-full h-[84px] bg-slate-700/40" />

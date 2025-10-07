@@ -251,6 +251,7 @@ const Library: React.FC = () => {
           anchorRect={hoverRect || undefined}
           title={hoverPayload?.title || ''}
           thumb={hoverPayload?.thumb}
+          srcPath={hoverPayload?.path}
           lines={hoverPayload?.lines || []}
           width={260}
           offset={12}
