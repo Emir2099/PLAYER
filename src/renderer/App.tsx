@@ -84,6 +84,13 @@ const Library: React.FC = () => {
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [sidebarContentVisible, setSidebarContentVisible] = useState(true);
   const sidebarAnimTimers = useRef<number[]>([]);
+  // INSIGHTS carousels (pagination & scroll)
+  const recentScrollRef = useRef<HTMLDivElement | null>(null);
+  const completedScrollRef = useRef<HTMLDivElement | null>(null);
+  const [recentPage, setRecentPage] = useState(0);
+  const [recentPages, setRecentPages] = useState(0);
+  const [completedPage, setCompletedPage] = useState(0);
+  const [completedPages, setCompletedPages] = useState(0);
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -164,6 +171,39 @@ const Library: React.FC = () => {
       }
     })();
   }, [folders]);
+
+  // Compute page counts for INSIGHTS carousels
+  useEffect(() => {
+    const computePages = (el: HTMLDivElement | null) => {
+      if (!el) return 0;
+      const vw = el.clientWidth || 1;
+      const sw = el.scrollWidth || 0;
+      return Math.max(1, Math.ceil(sw / vw));
+    };
+    const update = () => {
+      setRecentPages(computePages(recentScrollRef.current));
+      setCompletedPages(computePages(completedScrollRef.current));
+    };
+    update();
+    const onResize = () => update();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [/* recompute when data changes */ videos.length]);
+
+  const handleRecentScroll = () => {
+    const el = recentScrollRef.current;
+    if (!el) return;
+    const vw = el.clientWidth || 1;
+    const idx = Math.round(el.scrollLeft / vw);
+    setRecentPage(Math.max(0, Math.min(idx, Math.max(0, recentPages - 1))));
+  };
+  const handleCompletedScroll = () => {
+    const el = completedScrollRef.current;
+    if (!el) return;
+    const vw = el.clientWidth || 1;
+    const idx = Math.round(el.scrollLeft / vw);
+    setCompletedPage(Math.max(0, Math.min(idx, Math.max(0, completedPages - 1))));
+  };
 
   const filtered = useMemo<VideoItem[]>(() => {
     let list = videos;
@@ -709,56 +749,94 @@ const Library: React.FC = () => {
             </div>
             <div className="mt-6 col-span-full w-full rounded-xl p-5 bg-steam-panel border border-slate-800">
               <div className="text-slate-200 font-semibold mb-3">Recently watched</div>
-              <div className="grid gap-4 w-full" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
-                {(insights?.recent||[]).map((r)=> (
-                  <button
-                    key={r.path}
-                    onClick={async ()=>{
-                      const local = videos.find(v=>v.path===r.path);
-                      if (local) { setSelected(local); return; }
-                      try {
-                        const vi = await window.api.getVideoItem(r.path);
-                        if (vi) {
-                          try { const meta = await window.api.getMeta(vi.path); Object.assign(vi, meta); } catch {}
-                          setSelected(vi);
-                        }
-                      } catch {}
-                    }}
-                    className="block w-full rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors"
-                  >
-                    <div className="aspect-video bg-slate-900/60 overflow-hidden w-full">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" alt={r.name} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No thumbnail</div>}</div>
-                    <div className="p-3 text-sm truncate" title={r.name}>{r.name}</div>
-                  </button>
-                ))}
-                {(!insights || (insights?.recent||[]).length===0) && <div className="text-slate-400 text-sm">No watch history yet</div>}
+              <div ref={recentScrollRef} onScroll={handleRecentScroll} className="w-full overflow-x-auto no-scrollbar snap-x snap-mandatory" style={{ maxWidth: 'calc(4 * 280px + 3 * 16px)' }}>
+                <div className="flex gap-4 pr-2">
+                  {(insights?.recent||[]).map((r)=> (
+                    <button
+                      key={r.path}
+                      onClick={async ()=>{
+                        const local = videos.find(v=>v.path===r.path);
+                        if (local) { setSelected(local); return; }
+                        try {
+                          const vi = await window.api.getVideoItem(r.path);
+                          if (vi) {
+                            try { const meta = await window.api.getMeta(vi.path); Object.assign(vi, meta); } catch {}
+                            setSelected(vi);
+                          }
+                        } catch {}
+                      }}
+                      className="flex-shrink-0 w-[280px] snap-start rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors"
+                    >
+                      <div className="aspect-video bg-slate-900/60 overflow-hidden w-full">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" alt={r.name} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No thumbnail</div>}</div>
+                      <div className="p-3 text-sm truncate" title={r.name}>{r.name}</div>
+                    </button>
+                  ))}
+                  {(!insights || (insights?.recent||[]).length===0) && <div className="text-slate-400 text-sm">No watch history yet</div>}
+                </div>
               </div>
+              {(recentPages > 1) && (
+                <div className="mt-2 flex justify-center gap-2">
+                  {Array.from({ length: recentPages }).map((_, i) => (
+                    <button
+                      key={`recent-dot-${i}`}
+                      onClick={() => {
+                        const el = recentScrollRef.current;
+                        if (!el) return;
+                        el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+                        setRecentPage(i);
+                      }}
+                      aria-label={`Go to page ${i + 1}`}
+                      className={`h-2 w-2 rounded-full transition-colors ${i === recentPage ? 'bg-slate-300' : 'bg-slate-600/50 hover:bg-slate-500/70'}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="mt-6 col-span-full w-full rounded-xl p-5 bg-steam-panel border border-slate-800">
               <div className="text-slate-200 font-semibold mb-3">Completed videos</div>
-              <div className="grid gap-4 w-full" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' }}>
-                {(insights?.completed||[]).map((r)=> (
-                  <button
-                    key={`completed-${r.path}`}
-                    onClick={async ()=>{
-                      const local = videos.find(v=>v.path===r.path);
-                      if (local) { setSelected(local); return; }
-                      try {
-                        const vi = await window.api.getVideoItem(r.path);
-                        if (vi) {
-                          try { const meta = await window.api.getMeta(vi.path); Object.assign(vi, meta); } catch {}
-                          setSelected(vi);
-                        }
-                      } catch {}
-                    }}
-                    className="block w-full rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors"
-                  >
-                    <div className="aspect-video bg-slate-900/60 overflow-hidden w-full">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" alt={r.name} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No thumbnail</div>}</div>
-                    <div className="p-3 text-sm truncate" title={r.name}>{r.name}</div>
-                  </button>
-                ))}
-                {(!insights || (insights?.completed||[]).length===0) && <div className="text-slate-400 text-sm">No completed videos yet</div>}
+              <div ref={completedScrollRef} onScroll={handleCompletedScroll} className="w-full overflow-x-auto no-scrollbar snap-x snap-mandatory" style={{ maxWidth: 'calc(4 * 280px + 3 * 16px)' }}>
+                <div className="flex gap-4 pr-2">
+                  {(insights?.completed||[]).map((r)=> (
+                    <button
+                      key={`completed-${r.path}`}
+                      onClick={async ()=>{
+                        const local = videos.find(v=>v.path===r.path);
+                        if (local) { setSelected(local); return; }
+                        try {
+                          const vi = await window.api.getVideoItem(r.path);
+                          if (vi) {
+                            try { const meta = await window.api.getMeta(vi.path); Object.assign(vi, meta); } catch {}
+                            setSelected(vi);
+                          }
+                        } catch {}
+                      }}
+                      className="flex-shrink-0 w-[280px] snap-start rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors"
+                    >
+                      <div className="aspect-video bg-slate-900/60 overflow-hidden w-full">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" alt={r.name} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No thumbnail</div>}</div>
+                      <div className="p-3 text-sm truncate" title={r.name}>{r.name}</div>
+                    </button>
+                  ))}
+                  {(!insights || (insights?.completed||[]).length===0) && <div className="text-slate-400 text-sm">No completed videos yet</div>}
+                </div>
               </div>
+              {(completedPages > 1) && (
+                <div className="mt-2 flex justify-center gap-2">
+                  {Array.from({ length: completedPages }).map((_, i) => (
+                    <button
+                      key={`completed-dot-${i}`}
+                      onClick={() => {
+                        const el = completedScrollRef.current;
+                        if (!el) return;
+                        el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+                        setCompletedPage(i);
+                      }}
+                      aria-label={`Go to page ${i + 1}`}
+                      className={`h-2 w-2 rounded-full transition-colors ${i === completedPage ? 'bg-slate-300' : 'bg-slate-600/50 hover:bg-slate-500/70'}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (
