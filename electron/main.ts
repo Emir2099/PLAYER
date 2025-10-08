@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell, Menu } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, promises as fs } from 'node:fs';
@@ -90,6 +90,7 @@ async function createWindow() {
     height: 800,
     backgroundColor: '#0b0f15',
     show: false,
+    frame: false,
     webPreferences: {
       contextIsolation: true,
       preload: getPreloadPath(),
@@ -100,8 +101,14 @@ async function createWindow() {
     title: 'Steam-like Player'
   });
 
+  try { Menu.setApplicationMenu(null); } catch {}
+
   mainWindow.on('ready-to-show', () => mainWindow?.show());
   mainWindow.on('closed', () => (mainWindow = null));
+
+  // Notify renderer when maximize state changes
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('win:maximize-changed', true));
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('win:maximize-changed', false));
 
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -121,6 +128,18 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
+
+// Window controls
+ipcMain.handle('win:minimize', () => { try { mainWindow?.minimize(); return true; } catch { return false; } });
+ipcMain.handle('win:toggleMaximize', () => {
+  try {
+    if (!mainWindow) return false;
+    if (mainWindow.isMaximized()) { mainWindow.unmaximize(); } else { mainWindow.maximize(); }
+    return true;
+  } catch { return false; }
+});
+ipcMain.handle('win:isMaximized', () => { try { return !!mainWindow?.isMaximized(); } catch { return false; } });
+ipcMain.handle('win:close', () => { try { mainWindow?.close(); return true; } catch { return false; } });
 
 // Types
 export type VideoItem = {

@@ -40,6 +40,16 @@ const api = {
   getCategoryCovers: () => ipcRenderer.invoke('category:getCovers'),
   setCategoryCover: (id, imagePath) => ipcRenderer.invoke('category:setCover', id, imagePath),
   clearCategoryCover: (id) => ipcRenderer.invoke('category:clearCover'),
+  // Window controls for custom title bar
+  winMinimize: () => ipcRenderer.invoke('win:minimize'),
+  winToggleMaximize: () => ipcRenderer.invoke('win:toggleMaximize'),
+  winIsMaximized: () => ipcRenderer.invoke('win:isMaximized'),
+  winClose: () => ipcRenderer.invoke('win:close'),
+  onWinMaximizeChanged: (cb) => {
+    const handler = (_e, v) => cb?.(v);
+    ipcRenderer.on('win:maximize-changed', handler);
+    return () => ipcRenderer.off('win:maximize-changed', handler);
+  }
 };
 
 contextBridge.exposeInMainWorld('api', api);

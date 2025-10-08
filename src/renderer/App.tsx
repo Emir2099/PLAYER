@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog } from 'react-icons/fa';
+import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog, FaMinus, FaWindowMaximize, FaWindowRestore, FaTimes } from 'react-icons/fa';
 import SettingsModal from './components/SettingsModal';
 import { ToastProvider, useToast } from './components/Toast';
 import GameCard from './components/GameCard';
@@ -45,6 +45,7 @@ function formatDuration(sec?: number) {
 }
 
 const Library: React.FC = () => {
+  const [isMax, setIsMax] = useState(false);
   const [folder, setFolder] = useState<string>('');
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [folders, setFolders] = useState<Array<{ path: string; name: string; mtime: number }>>([]);
@@ -103,6 +104,16 @@ const Library: React.FC = () => {
       try { setAppSettings(await window.api.getAppSettings()); } catch {}
       await navigateTo(base);
     })();
+  }, []);
+
+  // Listen to maximize changes and get initial state
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    try {
+      off = window.api.onWinMaximizeChanged?.((v) => setIsMax(!!v));
+      window.api.winIsMaximized?.().then(v => setIsMax(!!v));
+    } catch {}
+    return () => { try { off?.(); } catch {} };
   }, []);
 
   // Load categories list when showing LIBRARY without a selected category
@@ -242,7 +253,26 @@ const Library: React.FC = () => {
     }
   };
   return (
-    <div className="min-h-screen bg-steam-bg text-slate-200 flex">
+    <div className="min-h-screen bg-steam-bg text-slate-200">
+      <style>{`.titlebar{-webkit-app-region:drag}.no-drag{-webkit-app-region:no-drag}`}</style>
+      {/* Custom Title Bar */}
+      <div className="titlebar fixed top-0 left-0 right-0 h-8 z-50 bg-gradient-to-r from-[#0e141c] via-[#111827] to-[#0e141c] border-b border-slate-800/80">
+        <div className="h-full flex items-center px-2">
+          <div className="text-[12px] text-slate-300/90 tracking-wide">Steam-like Player</div>
+          <div className="no-drag ml-auto flex items-center gap-1">
+            <button onClick={() => window.api.winMinimize?.()} className="w-10 h-8 inline-flex items-center justify-center text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors" title="Minimize">
+              <FaMinus size={12} />
+            </button>
+            <button onClick={() => window.api.winToggleMaximize?.()} className="w-10 h-8 inline-flex items-center justify-center text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors" title={isMax ? 'Restore' : 'Maximize'}>
+              {isMax ? <FaWindowRestore size={12} /> : <FaWindowMaximize size={12} />}
+            </button>
+            <button onClick={() => window.api.winClose?.()} className="w-12 h-8 inline-flex items-center justify-center text-slate-200 hover:bg-red-600/90 hover:text-white transition-colors" title="Close">
+              <FaTimes size={12} />
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="flex pt-8">
       <div className="w-72 shrink-0 border-r border-slate-800 p-4 hidden md:block">
         <div className="flex flex-col gap-2">
           <button onClick={chooseFolder} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
@@ -271,7 +301,7 @@ const Library: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0">
+  <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar / hero */}
         <div className="px-6 pt-4 pb-6 border-b border-slate-800 bg-gradient-to-b from-steam-panel to-transparent">
           <div className="flex items-center gap-3">
@@ -756,7 +786,6 @@ const Library: React.FC = () => {
                   try {
                     const v = e.currentTarget as HTMLVideoElement;
                     if (v && Number.isFinite(v.currentTime)) {
-                      // Save last position every ~5 seconds to avoid excessive writes
                       const now = Date.now();
                       if (now - posSaveTickRef.current > 5000) {
                         if (watchTimerRef.current?.path) {
@@ -796,6 +825,7 @@ const Library: React.FC = () => {
         onSaved={() => refreshMeta()}
       />
       </div>
+    </div>
     </div>
   );
 };

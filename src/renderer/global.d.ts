@@ -42,6 +42,12 @@ declare interface Window {
   getCategoryCovers: () => Promise<Record<string, string>>;
   setCategoryCover: (id: string, imagePath: string) => Promise<{ ok: boolean; url?: string; error?: string }>;
   clearCategoryCover: (id: string) => Promise<boolean>;
+    // Window controls
+    winMinimize: () => Promise<boolean>;
+    winToggleMaximize: () => Promise<boolean>;
+    winIsMaximized: () => Promise<boolean>;
+    winClose: () => Promise<boolean>;
+    onWinMaximizeChanged: (cb: (isMax: boolean) => void) => () => void;
     // Categories
     getCategories: () => Promise<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>;
     createCategory: (name: string) => Promise<{ ok: boolean; category?: { id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }; error?: string }>;
