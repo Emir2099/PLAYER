@@ -6,6 +6,7 @@ import GameCard from './components/GameCard';
 import FolderCard from './components/FolderCard';
 import HoverOverlay from './components/HoverOverlay';
 import ContextMenu from './components/ContextMenu';
+import CategoryList from './components/CategoryList';
 
 // Types mirrored from preload
 export type VideoItem = {
@@ -65,6 +66,13 @@ const Library: React.FC = () => {
   const watchTimerRef = useRef<{ path: string; lastTick: number } | null>(null);
   const posSaveTickRef = useRef<number>(0);
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'GLOBAL' | 'LIBRARY'>('GLOBAL');
+  const [categoryItems, setCategoryItems] = useState<Array<{ type: 'video' | 'folder'; path: string }>>([]);
+  const [categoryVideoMap, setCategoryVideoMap] = useState<Record<string, VideoItem>>({});
+  const [categoryFolderMap, setCategoryFolderMap] = useState<Record<string, { path: string; name: string; mtime: number }>>({});
+  const [libFolderPath, setLibFolderPath] = useState<string | null>(null);
+  const [libFolderVideos, setLibFolderVideos] = useState<VideoItem[]>([]);
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -80,6 +88,11 @@ const Library: React.FC = () => {
     (async () => {
       const last = await window.api.getLastFolder();
       const base = last && last.length ? last : await window.api.homeDir();
+      try {
+        const prefs = await window.api.getUiPrefs();
+        setSelectedCategoryId(prefs.selectedCategoryId ?? null);
+        setActiveTab(prefs.categoryView ? 'LIBRARY' : 'GLOBAL');
+      } catch {}
       setHistory(await window.api.getHistory());
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
       try { setAppSettings(await window.api.getAppSettings()); } catch {}
@@ -123,6 +136,54 @@ const Library: React.FC = () => {
       await navigateTo(sel);
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
     }
+  };
+
+  // Ensure details for category items (videos/folders) are loaded even if outside current folder
+  const hydrateCategoryItems = async (items: Array<{ type: 'video' | 'folder'; path: string }>) => {
+    for (const it of items) {
+      if (it.type === 'video') {
+        const path = it.path;
+        if (!videos.find(v => v.path === path) && !categoryVideoMap[path]) {
+          try {
+            const vi = await window.api.getVideoItem(path);
+            if (vi) {
+              // also try to get meta
+              try {
+                const meta = await window.api.getMeta(vi.path);
+                Object.assign(vi, meta);
+              } catch {}
+              setCategoryVideoMap(prev => ({ ...prev, [path]: vi }));
+            }
+          } catch {}
+        }
+      } else if (it.type === 'folder') {
+        const fpath = it.path;
+        if (!categoryFolderMap[fpath]) {
+          try {
+            const fi = await window.api.getFolderItem(fpath);
+            if (fi) setCategoryFolderMap(prev => ({ ...prev, [fpath]: fi }));
+          } catch {}
+        }
+        if (folderCounts[fpath] === undefined) {
+          try {
+            const vids = await window.api.scanVideos(fpath, { recursive: true, depth: 3 });
+            setFolderCounts(prev => ({ ...prev, [fpath]: vids.length }));
+          } catch {}
+        }
+      }
+    }
+  };
+
+  const openLibraryFolder = async (dir: string) => {
+    try {
+      setLibFolderPath(dir);
+      const items = await window.api.scanVideos(dir, { recursive: false });
+      setLibFolderVideos(items);
+      // light meta enrich
+      for (const v of items.slice(0, 24)) {
+        window.api.getMeta(v.path).then(meta => setLibFolderVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p)));
+      }
+    } catch {}
   };
 
   const refreshMeta = (items: VideoItem[] = videos) => {
@@ -172,6 +233,23 @@ const Library: React.FC = () => {
           </button>
           <button onClick={testFF} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Test FFmpeg</button>
         </div>
+        <div className="mt-4">
+          <CategoryList
+            onSelect={async (catId)=>{
+              setSelectedCategoryId(catId);
+              if (!catId) {
+                setCategoryItems([]);
+                await window.api.setUiPrefs({ selectedCategoryId: null, categoryView: activeTab==='LIBRARY' });
+                return;
+              }
+              const all = await window.api.getCategories();
+              const c = all.find((x:any)=>x.id===catId);
+              setCategoryItems(c?.items || []);
+              await window.api.setUiPrefs({ selectedCategoryId: catId, categoryView: activeTab==='LIBRARY' });
+              await hydrateCategoryItems(c?.items || []);
+            }}
+          />
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -211,7 +289,13 @@ const Library: React.FC = () => {
           </div>
         </div>
 
-        {/* Breadcrumbs */}
+        {/* Tabs + Breadcrumbs */}
+        <div className="px-6 pt-2 flex items-center gap-2">
+          <div className="inline-flex rounded overflow-hidden border border-slate-800">
+            <button className={`px-3 py-1.5 ${activeTab==='GLOBAL'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`} onClick={async ()=>{ setActiveTab('GLOBAL'); await window.api.setUiPrefs({ categoryView: false }); }}>GLOBAL</button>
+            <button className={`px-3 py-1.5 ${activeTab==='LIBRARY'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`} onClick={async ()=>{ setActiveTab('LIBRARY'); await window.api.setUiPrefs({ categoryView: true }); }}>LIBRARY</button>
+          </div>
+        </div>
         <div className="px-8 py-3">
           <div className="text-sm text-slate-300/90 overflow-x-auto whitespace-nowrap scrollbar-thin pr-2">
             {(() => {
@@ -247,13 +331,180 @@ const Library: React.FC = () => {
           </div>
         </div>
 
-        {/* Grid: Folders (no hover overlay) then videos */}
+  {/* Grid: GLOBAL shows folder/videos; LIBRARY shows selected category */}
         <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
+        {activeTab==='LIBRARY' && selectedCategoryId ? (
+          <>
+            {/* Drill-in breadcrumb for LIBRARY folder view */}
+            {libFolderPath && (
+              <div className="col-span-full -mt-2 mb-2 text-sm text-slate-300/90">
+                <button className="text-slate-200 hover:underline" onClick={()=> setLibFolderPath(null)}>Back to category</button>
+                <span className="mx-2 text-slate-500">/</span>
+                <span className="text-slate-100">{libFolderPath.split('\\').pop() || libFolderPath}</span>
+              </div>
+            )}
+            {libFolderPath ? (
+              libFolderVideos.map((vItem, idx) => (
+                <div key={`lib-folder-video-${idx}`}
+                     data-path={vItem.path}
+                     draggable
+                     onDragStart={(e)=>{
+                       const payload = JSON.stringify([{ type: 'video', path: vItem.path, sourceCategoryId: selectedCategoryId }]);
+                       e.dataTransfer.setData('application/x-player-item', payload);
+                       e.dataTransfer.effectAllowed = 'copy';
+                     }}
+                     onMouseEnter={async (e) => {
+                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                       if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current);
+                       hoverDelayRef.current = window.setTimeout(async () => {
+                         setHoverRect(rect);
+                         const stats = await window.api.getWatchStats(vItem.path);
+                         const total = Math.round(stats.totalMinutes);
+                         const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
+                         const last14 = stats.last14Minutes ?? 0;
+                         setHoverPayload({
+                           title: vItem.name,
+                           thumb: vItem.thumb,
+                           lines: [
+                             `Last watched: ${last}`,
+                             `Last two weeks: ${last14} min`,
+                             `Total: ${total} min`,
+                           ],
+                           path: vItem.path,
+                           lastPositionSec: stats.lastPositionSec,
+                         });
+                       }, 150);
+                     }}
+                     onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
+                >
+                  <GameCard
+                    title={vItem.name}
+                    cover={vItem.thumb}
+                    meta={[
+                      vItem.ext.toUpperCase(),
+                      formatBytes(vItem.size),
+                      formatDuration(vItem.duration),
+                      new Date(vItem.mtime).toLocaleDateString(),
+                    ].filter(Boolean).join(' • ')}
+                    watched={!!history[vItem.path]}
+                    overlayThumb={vItem.thumb}
+                    overlayDetails={[
+                      'FILE INFO',
+                      `${vItem.ext.toUpperCase()} • ${formatBytes(vItem.size)}`,
+                      formatDuration(vItem.duration) ? `Duration: ${formatDuration(vItem.duration)}` : undefined,
+                    ].filter(Boolean) as string[]}
+                    onPlay={() => setSelected(vItem)}
+                    onClick={() => setSelected(vItem)}
+                  />
+                </div>
+              ))
+            ) : (
+              categoryItems.map((it, idx) => {
+                if (it.type === 'folder') {
+                  const fPath = it.path;
+                  const info = categoryFolderMap[fPath];
+                  const name = info?.name || fPath.split('\\').pop() || fPath;
+                  const cover = folderCovers[fPath];
+                  const count = folderCounts[fPath];
+                  const meta = `${count===undefined? '…' : `${count} ${count===1?'video':'videos'}`} • in category`;
+                  return (
+                    <div key={`cat-folder-${idx}`}
+                         draggable
+                         onDragStart={(e)=>{
+                           const payload = JSON.stringify([{ type: 'folder', path: fPath, sourceCategoryId: selectedCategoryId }]);
+                           e.dataTransfer.setData('application/x-player-item', payload);
+                           e.dataTransfer.effectAllowed = 'copy';
+                         }}
+                    >
+                      <FolderCard
+                        title={name}
+                        cover={cover}
+                        meta={meta}
+                        onOpen={async () => { await openLibraryFolder(fPath); }}
+                        onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setFolderMenu({ x: e.clientX, y: e.clientY, path: fPath }); }}
+                        onDropImage={async (imgPath) => {
+                          const res = await window.api.setFolderCover(fPath, imgPath);
+                          if (res?.ok && res.url) setFolderCovers(prev => ({ ...prev, [fPath]: res.url! }));
+                        }}
+                      />
+                    </div>
+                  );
+                } else {
+                  const vPath = it.path as string;
+                  const vItem = videos.find(x=>x.path===vPath) || categoryVideoMap[vPath];
+                  if (!vItem) return null;
+                  return (
+                    <div key={`cat-video-${idx}`}
+                         data-path={vItem.path}
+                         draggable
+                         onDragStart={(e)=>{
+                           const payload = JSON.stringify([{ type: 'video', path: vItem.path, sourceCategoryId: selectedCategoryId }]);
+                           e.dataTransfer.setData('application/x-player-item', payload);
+                           e.dataTransfer.effectAllowed = 'copy';
+                         }}
+                         onMouseEnter={async (e) => {
+                           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                           if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current);
+                           hoverDelayRef.current = window.setTimeout(async () => {
+                             setHoverRect(rect);
+                             const stats = await window.api.getWatchStats(vItem.path);
+                             const total = Math.round(stats.totalMinutes);
+                             const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
+                             const last14 = stats.last14Minutes ?? 0;
+                             setHoverPayload({
+                               title: vItem.name,
+                               thumb: vItem.thumb,
+                               lines: [
+                                 `Last watched: ${last}`,
+                                 `Last two weeks: ${last14} min`,
+                                 `Total: ${total} min`,
+                               ],
+                               path: vItem.path,
+                               lastPositionSec: stats.lastPositionSec,
+                             });
+                           }, 150);
+                         }}
+                         onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
+                    >
+                      <GameCard
+                        title={vItem.name}
+                        cover={vItem.thumb}
+                        meta={[
+                          vItem.ext.toUpperCase(),
+                          formatBytes(vItem.size),
+                          formatDuration(vItem.duration),
+                          new Date(vItem.mtime).toLocaleDateString(),
+                        ].filter(Boolean).join(' • ')}
+                        watched={!!history[vItem.path]}
+                        overlayThumb={vItem.thumb}
+                        overlayDetails={[
+                          'FILE INFO',
+                          `${vItem.ext.toUpperCase()} • ${formatBytes(vItem.size)}`,
+                          formatDuration(vItem.duration) ? `Duration: ${formatDuration(vItem.duration)}` : undefined,
+                        ].filter(Boolean) as string[]}
+                        onPlay={() => setSelected(vItem)}
+                        onClick={() => setSelected(vItem)}
+                      />
+                    </div>
+                  );
+                }
+              })
+            )}
+          </>
+        ) : (
+          <>
         {folders.map(f => {
           const count = folderCounts[f.path];
           const countText = count === undefined ? '…' : `${count} ${count===1?'video':'videos'}`;
           return (
-            <div key={`folder-${f.path}`}>
+            <div key={`folder-${f.path}`}
+                 draggable
+                 onDragStart={(e)=>{
+                   const payload = JSON.stringify([{ type: 'folder', path: f.path }]);
+                   e.dataTransfer.setData('application/x-player-item', payload);
+                   e.dataTransfer.effectAllowed = 'copy';
+                 }}
+            >
               <FolderCard
                 title={f.name}
                 cover={folderCovers[f.path]}
@@ -276,6 +527,12 @@ const Library: React.FC = () => {
           <div
             key={v.path}
             data-path={v.path}
+            draggable
+            onDragStart={(e)=>{
+              const payload = JSON.stringify([{ type: 'video', path: v.path }]);
+              e.dataTransfer.setData('application/x-player-item', payload);
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
             onMouseEnter={async (e) => {
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
               if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current);
@@ -323,6 +580,8 @@ const Library: React.FC = () => {
         ))}
         {filtered.length === 0 && (
           <div className="text-slate-400">No videos found in this folder. Click "Choose Folder" to select another directory.</div>
+        )}
+          </>
         )}
         </div>
 

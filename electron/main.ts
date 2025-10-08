@@ -37,6 +37,8 @@ type Settings = {
   ffprobePath?: string;
   enableHoverPreviews?: boolean;
   folderCovers?: Record<string, string>; // folder path -> file:/// url
+  categories?: Category[];
+  uiPrefs?: { selectedCategoryId?: string | null; categoryView?: boolean };
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
@@ -136,6 +138,9 @@ export type FolderItem = {
   mtime: number;
 };
 
+type CatItem = { type: 'video' | 'folder'; path: string };
+type Category = { id: string; name: string; items: CatItem[] };
+
 const VIDEO_EXTS = new Set([
   'mp4','mkv','avi','mov','wmv','webm','flv','m4v','ts','mts','m2ts'
 ]);
@@ -207,6 +212,13 @@ async function listFolders(dir: string): Promise<FolderItem[]> {
   return out;
 }
 
+async function getFolderItem(dir: string): Promise<FolderItem | null> {
+  try {
+    const stat = await fs.stat(dir);
+    return { path: dir, name: path.basename(dir), mtime: stat.mtimeMs };
+  } catch { return null; }
+}
+
 async function ensureDir(p: string) {
   try { await fs.mkdir(p, { recursive: true }); } catch {}
 }
@@ -259,6 +271,22 @@ async function getVideoMeta(filePath: string): Promise<{ duration?: number; thum
     }
   }
   return { duration, thumb };
+}
+
+async function getVideoItemByPath(filePath: string): Promise<VideoItem | null> {
+  try {
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) return null;
+    const ext = path.extname(filePath).replace(/^\./, '').toLowerCase();
+    if (!VIDEO_EXTS.has(ext)) return null;
+    return {
+      path: filePath,
+      name: path.basename(filePath, path.extname(filePath)),
+      size: stat.size,
+      mtime: stat.mtimeMs,
+      ext,
+    };
+  } catch { return null; }
 }
 
 function resolveFFPaths() {
@@ -355,6 +383,11 @@ ipcMain.handle('fs:listFolders', async (_e, dir: string) => {
   return await listFolders(dir);
 });
 
+ipcMain.handle('fs:getFolderItem', async (_e, dir: string) => {
+  if (!dir || !existsSync(dir)) return null;
+  return await getFolderItem(dir);
+});
+
 ipcMain.handle('os:home', () => os.homedir());
 
 ipcMain.handle('revealInExplorer', async (_e, filePath: string) => {
@@ -388,6 +421,11 @@ ipcMain.handle('store:setFFPaths', async (_e, val: { ffmpegPath?: string; ffprob
 
 ipcMain.handle('video:getMeta', async (_e, filePath: string) => {
   return await getVideoMeta(filePath);
+});
+
+ipcMain.handle('fs:getVideoItem', async (_e, filePath: string) => {
+  if (!filePath || !existsSync(filePath)) return null;
+  return await getVideoItemByPath(filePath);
 });
 
 ipcMain.handle('folder:getCovers', () => {
@@ -518,4 +556,103 @@ ipcMain.handle('store:setAppSettings', (_e, v: { enableHoverPreviews?: boolean }
   } catch {
     return false;
   }
+});
+
+// Categories CRUD (pure metadata, no file moves)
+function getCategories(): Category[] {
+  try { return (store.get('categories') as Category[]) || []; } catch { return []; }
+}
+function setCategories(cats: Category[]) {
+  try { store.set('categories', cats); } catch {}
+}
+
+ipcMain.handle('cats:get', () => {
+  return getCategories();
+});
+
+ipcMain.handle('cats:create', (_e, name: string) => {
+  try {
+    const cats = getCategories();
+    const id = (crypto as any).randomUUID ? (crypto as any).randomUUID() : crypto.randomBytes(8).toString('hex');
+    const cat: Category = { id, name: name?.trim() || 'New Category', items: [] };
+    cats.push(cat);
+    setCategories(cats);
+    return { ok: true, category: cat };
+  } catch (e) {
+    return { ok: false, error: String((e as any)?.message || e) };
+  }
+});
+
+ipcMain.handle('cats:rename', (_e, id: string, name: string) => {
+  try {
+    const cats = getCategories();
+    const idx = cats.findIndex(c => c.id === id);
+    if (idx === -1) return { ok: false, error: 'Not found' };
+    cats[idx].name = name?.trim() || cats[idx].name;
+    setCategories(cats);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String((e as any)?.message || e) };
+  }
+});
+
+ipcMain.handle('cats:delete', (_e, id: string) => {
+  try {
+    const cats = getCategories().filter(c => c.id !== id);
+    setCategories(cats);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String((e as any)?.message || e) };
+  }
+});
+
+ipcMain.handle('cats:addItems', (_e, id: string, items: CatItem[]) => {
+  try {
+    const cats = getCategories();
+    const cat = cats.find(c => c.id === id);
+    if (!cat) return { ok: false, error: 'Not found' };
+    const exists = new Set(cat.items.map(i => `${i.type}:${i.path}`));
+    for (const it of items || []) {
+      if (!it?.path || !it?.type) continue;
+      const key = `${it.type}:${it.path}`;
+      if (!exists.has(key)) {
+        cat.items.push({ type: it.type === 'folder' ? 'folder' : 'video', path: it.path });
+        exists.add(key);
+      }
+    }
+    setCategories(cats);
+    return { ok: true, category: cat };
+  } catch (e) {
+    return { ok: false, error: String((e as any)?.message || e) };
+  }
+});
+
+ipcMain.handle('cats:removeItem', (_e, id: string, item: CatItem) => {
+  try {
+    const cats = getCategories();
+    const cat = cats.find(c => c.id === id);
+    if (!cat) return { ok: false, error: 'Not found' };
+    cat.items = cat.items.filter(i => !(i.type === item.type && i.path === item.path));
+    setCategories(cats);
+    return { ok: true, category: cat };
+  } catch (e) {
+    return { ok: false, error: String((e as any)?.message || e) };
+  }
+});
+
+// UI prefs for selected category and view mode
+ipcMain.handle('ui:prefs:get', () => {
+  try {
+    const prefs = (store.get('uiPrefs') as { selectedCategoryId?: string | null; categoryView?: boolean }) || {};
+    return { selectedCategoryId: prefs.selectedCategoryId ?? null, categoryView: !!prefs.categoryView };
+  } catch { return { selectedCategoryId: null, categoryView: false }; }
+});
+
+ipcMain.handle('ui:prefs:set', (_e, v: { selectedCategoryId?: string | null; categoryView?: boolean }) => {
+  try {
+    const cur = (store.get('uiPrefs') as { selectedCategoryId?: string | null; categoryView?: boolean }) || {};
+    const next = { ...cur, ...v };
+    store.set('uiPrefs', next);
+    return true;
+  } catch { return false; }
 });

@@ -23,6 +23,19 @@ const api = {
   setLastPosition: (p, s) => ipcRenderer.invoke('history:setLastPosition', p, s),
   getAppSettings: () => ipcRenderer.invoke('store:getAppSettings'),
   setAppSettings: (v) => ipcRenderer.invoke('store:setAppSettings', v),
+  // Categories
+  getCategories: () => ipcRenderer.invoke('cats:get'),
+  createCategory: (name) => ipcRenderer.invoke('cats:create', name),
+  renameCategory: (id, name) => ipcRenderer.invoke('cats:rename', id, name),
+  deleteCategory: (id) => ipcRenderer.invoke('cats:delete', id),
+  addToCategory: (id, items) => ipcRenderer.invoke('cats:addItems', id, items),
+  removeFromCategory: (id, item) => ipcRenderer.invoke('cats:removeItem', id, item),
+  // UI prefs
+  getUiPrefs: () => ipcRenderer.invoke('ui:prefs:get'),
+  setUiPrefs: (v) => ipcRenderer.invoke('ui:prefs:set', v),
+  // Item fetch helpers for categories
+  getVideoItem: (p) => ipcRenderer.invoke('fs:getVideoItem', p),
+  getFolderItem: (p) => ipcRenderer.invoke('fs:getFolderItem', p),
 };
 
 contextBridge.exposeInMainWorld('api', api);

@@ -32,5 +32,18 @@ declare interface Window {
     setLastPosition: (filePath: string, seconds: number) => Promise<boolean>;
     getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
     setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
+    // UI prefs
+    getUiPrefs: () => Promise<{ selectedCategoryId: string | null; categoryView: boolean }>;
+    setUiPrefs: (v: { selectedCategoryId?: string | null; categoryView?: boolean }) => Promise<boolean>;
+    // Item lookups
+    getVideoItem: (filePath: string) => Promise<RenderVideoItem | null>;
+    getFolderItem: (dir: string) => Promise<{ path: string; name: string; mtime: number } | null>;
+    // Categories
+    getCategories: () => Promise<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>;
+    createCategory: (name: string) => Promise<{ ok: boolean; category?: { id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }; error?: string }>;
+    renameCategory: (id: string, name: string) => Promise<{ ok: boolean; error?: string }>;
+    deleteCategory: (id: string) => Promise<{ ok: boolean; error?: string }>;
+    addToCategory: (id: string, items: Array<{ type: 'video' | 'folder'; path: string }>) => Promise<{ ok: boolean; category?: { id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }; error?: string }>;
+    removeFromCategory: (id: string, item: { type: 'video' | 'folder'; path: string }) => Promise<{ ok: boolean; category?: { id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }; error?: string }>;
   };
 }
