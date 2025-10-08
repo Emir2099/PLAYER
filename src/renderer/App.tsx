@@ -197,6 +197,10 @@ const Library: React.FC = () => {
     byExt: Array<{ key: string; count: number; minutes: number }>; // top 6
     byFolder: Array<{ key: string; minutes: number }>; // top 6
     recent: Array<{ path: string; name: string; thumb?: string | null }>; // up to 8
+    mostWatchedVideo?: { path: string; name: string; minutes: number; thumb?: string | null };
+    mostWatchedCategory?: { id?: string; name: string; minutes: number };
+    completedCount: number;
+    completed: Array<{ path: string; name: string; thumb?: string | null }>; // up to 12
   };
   const [insights, setInsights] = useState<InsightData | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -206,7 +210,7 @@ const Library: React.FC = () => {
     try {
       setInsightsLoading(true);
       const entries = Object.entries(history);
-      if (!entries.length) { setInsights({ totalMinutes:0, last14Minutes:0, totalItems:0, byExt:[], byFolder:[], recent:[] }); setInsightsLoading(false); return; }
+  if (!entries.length) { setInsights({ totalMinutes:0, last14Minutes:0, totalItems:0, byExt:[], byFolder:[], recent:[], completedCount:0, completed:[] }); setInsightsLoading(false); return; }
       // Recent: sort by value descending like Continue watching list
       const recentPaths = entries.sort((a,b)=> b[1]-a[1]).slice(0, 8).map(([p])=>p);
       const statsMap: Record<string, { last14: number; total: number; last?: number; lastPos?: number }>= {};
@@ -238,18 +242,70 @@ const Library: React.FC = () => {
         byFolderAgg[folder] = (byFolderAgg[folder]||0) + (statsMap[p]?.total || 0);
       }
       const byFolder = Object.entries(byFolderAgg).map(([k,v])=>({ key:k, minutes:v })).sort((a,b)=> b.minutes - a.minutes).slice(0,6);
-      // recent thumbs
-      const recent: InsightData['recent'] = [];
-      await Promise.all(recentPaths.map(async (p)=>{
-        const name = p.split('\\').pop() || p;
-        let thumb: string | null | undefined = undefined;
+      // fetch meta for paths to compute thumbs and durations
+      const pathMeta: Record<string, { duration?: number; thumb?: string | null }> = {};
+      await Promise.all(allPaths.map(async (p)=>{
         try {
           const meta = await window.api.getMeta(p);
-          thumb = meta?.thumb;
-        } catch {}
-        recent.push({ path:p, name, thumb });
+          pathMeta[p] = { duration: meta?.duration, thumb: meta?.thumb };
+        } catch { pathMeta[p] = {}; }
       }));
-      setInsights({ totalMinutes, last14Minutes: last14Total, totalItems: allPaths.length, byExt, byFolder, recent });
+
+      // recent thumbs
+      const recent: InsightData["recent"] = [];
+      for (const p of recentPaths) {
+        const name = p.split('\\').pop() || p;
+        recent.push({ path: p, name, thumb: pathMeta[p]?.thumb });
+      }
+
+      // most watched video
+      let mostWatchedVideo: InsightData["mostWatchedVideo"] | undefined = undefined;
+      for (const p of allPaths) {
+        const minutes = statsMap[p]?.total || 0;
+        if (!mostWatchedVideo || minutes > mostWatchedVideo.minutes) {
+          mostWatchedVideo = {
+            path: p,
+            name: p.split('\\').pop() || p,
+            minutes,
+            thumb: pathMeta[p]?.thumb
+          };
+        }
+      }
+
+      // completed videos (>=95% watched or near end)
+      const completedList: InsightData["completed"] = [];
+      for (const p of allPaths) {
+        const durSec = pathMeta[p]?.duration || 0;
+        const totMin = statsMap[p]?.total || 0;
+        const totSec = totMin * 60;
+        const nearEnd = (statsMap[p]?.lastPos ?? undefined) !== undefined ? ((statsMap[p]!.lastPos! <= 10) && durSec > 0) : false;
+        const ratio = durSec > 0 ? (totSec / durSec) : 0;
+        const isCompleted = durSec > 0 && (ratio >= 0.95 || nearEnd);
+        if (isCompleted) {
+          completedList.push({ path: p, name: p.split('\\').pop() || p, thumb: pathMeta[p]?.thumb });
+        }
+      }
+      const completedCount = completedList.length;
+
+      // most watched category (aggregate minutes of videos attributed to a category)
+      let mostWatchedCategory: InsightData["mostWatchedCategory"] | undefined = undefined;
+      try {
+        const cats = await window.api.getCategories();
+        const catMinutes: Array<{ id?: string; name: string; minutes: number }> = [];
+        for (const c of cats || []) {
+          let minutes = 0;
+          const items = (c.items || []) as Array<{ type: 'video'|'folder'; path: string }>;
+          for (const p of allPaths) {
+            const belongs = items.some(it => it.type === 'video' ? it.path === p : p.startsWith(it.path));
+            if (belongs) minutes += (statsMap[p]?.total || 0);
+          }
+          if (minutes > 0) catMinutes.push({ id: (c as any).id, name: (c as any).name, minutes });
+        }
+        catMinutes.sort((a,b)=> b.minutes - a.minutes);
+        if (catMinutes.length) mostWatchedCategory = catMinutes[0];
+      } catch {}
+
+      setInsights({ totalMinutes, last14Minutes: last14Total, totalItems: allPaths.length, byExt, byFolder, recent, mostWatchedVideo, mostWatchedCategory, completedCount, completed: completedList.slice(0, 12) });
       try {
         const agg = await window.api.getDailyTotals(30);
         const minutes = agg.seconds.map((s: number) => Math.round(s/60));
@@ -582,6 +638,28 @@ const Library: React.FC = () => {
                 <div className="text-3xl font-semibold mt-1">{insightsLoading? '…' : `${Object.keys(history).length}`}</div>
                 <div className="text-slate-400 text-xs mt-2">can resume where you left off</div>
               </div>
+              <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-amber-900/40 via-slate-900/50 to-rose-900/40 border border-slate-800">
+                <div className="text-slate-400 text-sm">Most watched video</div>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="w-16 h-10 bg-slate-800 overflow-hidden rounded">
+                    {insights?.mostWatchedVideo?.thumb ? <img src={insights.mostWatchedVideo.thumb} className="w-full h-full object-cover" /> : null}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-slate-200 text-sm truncate" title={insights?.mostWatchedVideo?.name}>{insights?.mostWatchedVideo?.name || '—'}</div>
+                    <div className="text-slate-400 text-xs">{insights?.mostWatchedVideo ? `${Math.round(insights.mostWatchedVideo.minutes)} min` : 'No data'}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-cyan-900/40 via-slate-900/50 to-teal-900/40 border border-slate-800">
+                <div className="text-slate-400 text-sm">Most watched category</div>
+                <div className="text-2xl font-semibold mt-2 truncate" title={insights?.mostWatchedCategory?.name || ''}>{insights?.mostWatchedCategory?.name || '—'}</div>
+                <div className="text-slate-400 text-xs mt-1">{insights?.mostWatchedCategory ? `${Math.round(insights.mostWatchedCategory.minutes)} min` : 'No data'}</div>
+              </div>
+              <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-emerald-900/40 via-slate-900/50 to-lime-900/40 border border-slate-800">
+                <div className="text-slate-400 text-sm">Completed videos</div>
+                <div className="text-3xl font-semibold mt-1">{insightsLoading? '…' : `${insights?.completedCount || 0}`}</div>
+                <div className="text-slate-400 text-xs mt-2">watched fully</div>
+              </div>
             </div>
             <div className="grid gap-6 mt-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
               <div className="rounded-xl p-5 bg-steam-panel border border-slate-800">
@@ -653,6 +731,33 @@ const Library: React.FC = () => {
                   </button>
                 ))}
                 {(!insights || (insights?.recent||[]).length===0) && <div className="text-slate-400 text-sm">No watch history yet</div>}
+              </div>
+            </div>
+
+            <div className="mt-6 col-span-full w-full rounded-xl p-5 bg-steam-panel border border-slate-800">
+              <div className="text-slate-200 font-semibold mb-3">Completed videos</div>
+              <div className="grid gap-4 w-full" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' }}>
+                {(insights?.completed||[]).map((r)=> (
+                  <button
+                    key={`completed-${r.path}`}
+                    onClick={async ()=>{
+                      const local = videos.find(v=>v.path===r.path);
+                      if (local) { setSelected(local); return; }
+                      try {
+                        const vi = await window.api.getVideoItem(r.path);
+                        if (vi) {
+                          try { const meta = await window.api.getMeta(vi.path); Object.assign(vi, meta); } catch {}
+                          setSelected(vi);
+                        }
+                      } catch {}
+                    }}
+                    className="block w-full rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors"
+                  >
+                    <div className="aspect-video bg-slate-900/60 overflow-hidden w-full">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" alt={r.name} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No thumbnail</div>}</div>
+                    <div className="p-3 text-sm truncate" title={r.name}>{r.name}</div>
+                  </button>
+                ))}
+                {(!insights || (insights?.completed||[]).length===0) && <div className="text-slate-400 text-sm">No completed videos yet</div>}
               </div>
             </div>
           </div>
