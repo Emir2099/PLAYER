@@ -69,7 +69,7 @@ const Library: React.FC = () => {
   const posSaveTickRef = useRef<number>(0);
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'GLOBAL' | 'LIBRARY'>('GLOBAL');
+  const [activeTab, setActiveTab] = useState<'GLOBAL' | 'LIBRARY' | 'INSIGHTS'>('GLOBAL');
   const [categoryItems, setCategoryItems] = useState<Array<{ type: 'video' | 'folder'; path: string }>>([]);
   const [categoryVideoMap, setCategoryVideoMap] = useState<Record<string, VideoItem>>({});
   const [categoryFolderMap, setCategoryFolderMap] = useState<Record<string, { path: string; name: string; mtime: number }>>({});
@@ -101,8 +101,8 @@ const Library: React.FC = () => {
       const base = last && last.length ? last : await window.api.homeDir();
       try {
         const prefs = await window.api.getUiPrefs();
-        setSelectedCategoryId(prefs.selectedCategoryId ?? null);
-        setActiveTab(prefs.categoryView ? 'LIBRARY' : 'GLOBAL');
+  setSelectedCategoryId(prefs.selectedCategoryId ?? null);
+  setActiveTab(prefs.categoryView ? 'LIBRARY' : 'GLOBAL');
         if (typeof (prefs as any).sidebarOpen === 'boolean') {
           const open = !!(prefs as any).sidebarOpen;
           setSidebarExpanded(open);
@@ -188,6 +188,83 @@ const Library: React.FC = () => {
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
     }
   };
+
+  // -------------------- INSIGHTS --------------------
+  type InsightData = {
+    totalMinutes: number;
+    last14Minutes: number;
+    totalItems: number;
+    byExt: Array<{ key: string; count: number; minutes: number }>; // top 6
+    byFolder: Array<{ key: string; minutes: number }>; // top 6
+    recent: Array<{ path: string; name: string; thumb?: string | null }>; // up to 8
+  };
+  const [insights, setInsights] = useState<InsightData | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [dailyTotals, setDailyTotals] = useState<{ dates: string[]; minutes: number[] }>({ dates: [], minutes: [] });
+
+  const buildInsights = async () => {
+    try {
+      setInsightsLoading(true);
+      const entries = Object.entries(history);
+      if (!entries.length) { setInsights({ totalMinutes:0, last14Minutes:0, totalItems:0, byExt:[], byFolder:[], recent:[] }); setInsightsLoading(false); return; }
+      // Recent: sort by value descending like Continue watching list
+      const recentPaths = entries.sort((a,b)=> b[1]-a[1]).slice(0, 8).map(([p])=>p);
+      const statsMap: Record<string, { last14: number; total: number; last?: number; lastPos?: number }>= {};
+      let totalMinutes = 0; let last14Total = 0;
+      // Limit total processed to 300 items to keep it fast
+      const allPaths = entries.map(([p])=>p).slice(0, 300);
+      await Promise.all(allPaths.map(async (p)=>{
+        try {
+          const s = await window.api.getWatchStats(p);
+          totalMinutes += Math.round(s.totalMinutes || 0);
+          last14Total += Math.round(s.last14Minutes || 0);
+          statsMap[p] = { last14: s.last14Minutes||0, total: s.totalMinutes||0, last: s.lastWatched ? new Date(s.lastWatched).getTime() : undefined, lastPos: s.lastPositionSec };
+        } catch {}
+      }));
+      // by extension
+      const byExtAgg: Record<string, { count:number; minutes:number }> = {};
+      for (const p of allPaths) {
+        const name = p.split('\\').pop() || p;
+        const ext = (name.split('.').pop() || '').toLowerCase();
+        const m = statsMap[p]?.total || 0;
+        if (!byExtAgg[ext]) byExtAgg[ext] = { count:0, minutes:0 };
+        byExtAgg[ext].count += 1; byExtAgg[ext].minutes += m;
+      }
+      const byExt = Object.entries(byExtAgg).filter(([k])=>!!k).map(([k,v])=>({ key:k.toUpperCase(), count:v.count, minutes:v.minutes })).sort((a,b)=> b.count - a.count).slice(0,6);
+      // by folder (sum minutes)
+      const byFolderAgg: Record<string, number> = {};
+      for (const p of allPaths) {
+        const folder = p.substring(0, Math.max(0, p.lastIndexOf('\\')));
+        byFolderAgg[folder] = (byFolderAgg[folder]||0) + (statsMap[p]?.total || 0);
+      }
+      const byFolder = Object.entries(byFolderAgg).map(([k,v])=>({ key:k, minutes:v })).sort((a,b)=> b.minutes - a.minutes).slice(0,6);
+      // recent thumbs
+      const recent: InsightData['recent'] = [];
+      await Promise.all(recentPaths.map(async (p)=>{
+        const name = p.split('\\').pop() || p;
+        let thumb: string | null | undefined = undefined;
+        try {
+          const meta = await window.api.getMeta(p);
+          thumb = meta?.thumb;
+        } catch {}
+        recent.push({ path:p, name, thumb });
+      }));
+      setInsights({ totalMinutes, last14Minutes: last14Total, totalItems: allPaths.length, byExt, byFolder, recent });
+      try {
+        const agg = await window.api.getDailyTotals(30);
+        const minutes = agg.seconds.map(s => Math.round(s/60));
+        setDailyTotals({ dates: agg.dates, minutes });
+      } catch { setDailyTotals({ dates: [], minutes: [] }); }
+    } catch {
+      setInsights(null);
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'INSIGHTS') buildInsights();
+  }, [activeTab, history]);
 
   // Ensure details for category items (videos/folders) are loaded even if outside current folder
   const hydrateCategoryItems = async (items: Array<{ type: 'video' | 'folder'; path: string }>) => {
@@ -413,6 +490,10 @@ const Library: React.FC = () => {
                 await window.api.setUiPrefs({ categoryView: true });
               }}
             >LIBRARY</button>
+            <button
+              className={`px-1 py-1 tracking-wide ${activeTab==='INSIGHTS' ? 'text-sky-300 border-b-2 border-sky-400' : 'text-slate-300 hover:text-slate-100'}`}
+              onClick={()=> setActiveTab('INSIGHTS')}
+            >INSIGHTS</button>
           </div>
         </div>
 
@@ -479,7 +560,90 @@ const Library: React.FC = () => {
 
   {/* Grid: GLOBAL shows folder/videos; LIBRARY shows selected category */}
         <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
-        {activeTab==='LIBRARY' ? (
+        {activeTab==='INSIGHTS' ? (
+          <div className="px-8 pb-12 w-full max-w-7xl mx-auto">
+            {/* KPI row: auto-fit into 1–3 columns based on width */}
+            <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+              <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-sky-900/40 via-slate-900/50 to-indigo-900/40 border border-slate-800">
+                <div className="text-slate-400 text-sm">Total watch time</div>
+                <div className="text-3xl font-semibold mt-1">{insightsLoading? '…' : `${Math.floor((insights?.totalMinutes||0)/60)}h ${Math.round((insights?.totalMinutes||0)%60)}m`}</div>
+                <div className="text-slate-400 text-xs mt-2">across {insights?.totalItems||0} items</div>
+              </div>
+              <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-emerald-900/40 via-slate-900/50 to-cyan-900/40 border border-slate-800">
+                <div className="text-slate-400 text-sm">Last 14 days</div>
+                <div className="text-3xl font-semibold mt-1">{insightsLoading? '…' : `${Math.floor((insights?.last14Minutes||0)/60)}h ${Math.round((insights?.last14Minutes||0)%60)}m`}</div>
+                <div className="text-slate-400 text-xs mt-2">active minutes watched</div>
+              </div>
+              <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-fuchsia-900/40 via-slate-900/50 to-purple-900/40 border border-slate-800">
+                <div className="text-slate-400 text-sm">Items with progress</div>
+                <div className="text-3xl font-semibold mt-1">{insightsLoading? '…' : `${Object.keys(history).length}`}</div>
+                <div className="text-slate-400 text-xs mt-2">can resume where you left off</div>
+              </div>
+            </div>
+
+            {/* Detail row: auto-fit into 1–3 columns, larger min width for charts */}
+            <div className="grid gap-6 mt-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+              {/* Sparkline card */}
+              <div className="rounded-xl p-5 bg-steam-panel border border-slate-800">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-slate-200 font-semibold">Daily minutes (30d)</div>
+                  <div className="text-slate-400 text-xs">Total: {dailyTotals.minutes.reduce((a,b)=>a+b,0)}m</div>
+                </div>
+                <Sparkline data={dailyTotals.minutes} labels={dailyTotals.dates} height={64} />
+              </div>
+              <div className="rounded-xl p-5 bg-steam-panel border border-slate-800">
+                <div className="text-slate-200 font-semibold mb-3">Top file types</div>
+                <div className="space-y-2">
+                  {(insights?.byExt||[]).map((e)=>{
+                    const max = Math.max(1, ...((insights?.byExt||[]).map(x=>x.count)));
+                    const pct = Math.round((e.count/max)*100);
+                    return (
+                      <div key={e.key} className="flex items-center gap-3">
+                        <div className="w-14 text-slate-300 text-sm">{e.key}</div>
+                        <div className="flex-1 h-2 rounded bg-slate-800 overflow-hidden"><div className="h-full bg-gradient-to-r from-sky-500 to-indigo-400" style={{ width: pct+'%' }} /></div>
+                        <div className="w-10 text-right text-slate-400 text-sm">{e.count}</div>
+                      </div>
+                    );
+                  })}
+                  {(!insights || (insights?.byExt||[]).length===0) && <div className="text-slate-400 text-sm">No data yet</div>}
+                </div>
+              </div>
+              <div className="rounded-xl p-5 bg-steam-panel border border-slate-800">
+                <div className="text-slate-200 font-semibold mb-3">Most watched folders</div>
+                <div className="space-y-2">
+                  {(insights?.byFolder||[]).map((f)=>{
+                    const max = Math.max(1, ...((insights?.byFolder||[]).map(x=>x.minutes)));
+                    const pct = Math.round((f.minutes/max)*100);
+                    const label = f.key.split('\\').pop() || f.key;
+                    return (
+                      <div key={f.key} className="flex items-center gap-3">
+                        <div className="flex-1">
+                          <div className="text-slate-300 text-sm truncate" title={f.key}>{label}</div>
+                          <div className="h-2 rounded bg-slate-800 overflow-hidden mt-1"><div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400" style={{ width: pct+'%' }} /></div>
+                        </div>
+                        <div className="w-20 text-right text-slate-400 text-sm">{Math.round(f.minutes)}m</div>
+                      </div>
+                    );
+                  })}
+                  {(!insights || (insights?.byFolder||[]).length===0) && <div className="text-slate-400 text-sm">No data yet</div>}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl p-5 bg-steam-panel border border-slate-800">
+              <div className="text-slate-200 font-semibold mb-3">Recently watched</div>
+              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                {(insights?.recent||[]).map((r)=> (
+                  <button key={r.path} onClick={()=> setSelected(videos.find(v=>v.path===r.path) || null)} className="rounded bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors">
+                    <div className="aspect-video bg-slate-900/60 overflow-hidden">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" /> : null}</div>
+                    <div className="p-2 text-sm truncate" title={r.name}>{r.name}</div>
+                  </button>
+                ))}
+                {(!insights || (insights?.recent||[]).length===0) && <div className="text-slate-400 text-sm">No watch history yet</div>}
+              </div>
+            </div>
+          </div>
+        ) : activeTab==='LIBRARY' ? (
           <>
             {/* LIBRARY: either category cards list (no selection), category items grid, or drill-in folder videos */}
             {!selectedCategoryId && !libFolderPath && allCategories.length === 0 && (
@@ -917,3 +1081,29 @@ const App: React.FC = () => (
 );
 
 export default App;
+
+// Lightweight sparkline SVG component
+const Sparkline: React.FC<{ data: number[]; labels?: string[]; height?: number; stroke?: string }>=({ data, labels, height=48, stroke='url(#sg)' })=>{
+  const w = Math.max(120, data.length * 8);
+  const h = height;
+  const max = Math.max(1, ...data);
+  const pts = data.map((v,i)=>{
+    const x = (i/(Math.max(1,data.length-1))) * (w-8) + 4;
+    const y = h - (v/max) * (h-10) - 5;
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <div className="w-full">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-16">
+        <defs>
+          <linearGradient id="sg" x1="0" x2="1" y1="0" y2="0">
+            <stop offset="0%" stopColor="#38bdf8" />
+            <stop offset="100%" stopColor="#818cf8" />
+          </linearGradient>
+        </defs>
+        <polyline fill="none" stroke={stroke} strokeWidth="2.5" points={pts} />
+        <polyline fill="url(#sg)" opacity="0.08" points={`4,${h-5} ${pts} ${w-4},${h-5}`} />
+      </svg>
+    </div>
+  );
+};

@@ -21,6 +21,7 @@ const api = {
   addWatchTime: (p, s) => ipcRenderer.invoke('history:addWatchTime', p, s),
   getWatchStats: (p) => ipcRenderer.invoke('history:getStats', p),
   setLastPosition: (p, s) => ipcRenderer.invoke('history:setLastPosition', p, s),
+  getDailyTotals: (d) => ipcRenderer.invoke('history:getDailyTotals', d),
   getAppSettings: () => ipcRenderer.invoke('store:getAppSettings'),
   setAppSettings: (v) => ipcRenderer.invoke('store:setAppSettings', v),
   // Categories

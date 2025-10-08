@@ -634,6 +634,30 @@ ipcMain.handle('history:setLastPosition', (_e, filePath: string, seconds: number
   } catch { return false; }
 });
 
+// Aggregate daily totals across all files for the last N days
+ipcMain.handle('history:getDailyTotals', (_e, days: number = 30) => {
+  try {
+    const daily = (store.get('watchDaily') as Record<string, Record<string, number>>) || {};
+    const today = new Date();
+    const dates: string[] = [];
+    const seconds: number[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      dates.push(key);
+      let sum = 0;
+      for (const fp of Object.keys(daily)) {
+        sum += daily[fp]?.[key] || 0;
+      }
+      seconds.push(sum);
+    }
+    return { dates, seconds };
+  } catch {
+    return { dates: [], seconds: [] };
+  }
+});
+
 ipcMain.handle('store:getAppSettings', () => {
   try {
     const enabled = store.get('enableHoverPreviews');

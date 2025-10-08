@@ -30,6 +30,7 @@ declare interface Window {
     addWatchTime: (filePath: string, seconds: number) => Promise<boolean>;
     getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number; lastPositionSec?: number }>;
     setLastPosition: (filePath: string, seconds: number) => Promise<boolean>;
+  getDailyTotals: (days?: number) => Promise<{ dates: string[]; seconds: number[] }>;
     getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
     setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
     // UI prefs

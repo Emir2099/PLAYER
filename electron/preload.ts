@@ -31,6 +31,7 @@ type Api = {
   addWatchTime: (filePath: string, seconds: number) => Promise<boolean>;
   getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number; lastPositionSec?: number }>;
   setLastPosition: (filePath: string, seconds: number) => Promise<boolean>;
+  getDailyTotals: (days?: number) => Promise<{ dates: string[]; seconds: number[] }>;
   getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
   setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
 };
@@ -56,6 +57,7 @@ const api: Api = {
   addWatchTime: (p: string, s: number) => ipcRenderer.invoke('history:addWatchTime', p, s),
   getWatchStats: (p: string) => ipcRenderer.invoke('history:getStats', p),
   setLastPosition: (p: string, s: number) => ipcRenderer.invoke('history:setLastPosition', p, s),
+  getDailyTotals: (d?: number) => ipcRenderer.invoke('history:getDailyTotals', d),
   getAppSettings: () => ipcRenderer.invoke('store:getAppSettings'),
   setAppSettings: (v: { enableHoverPreviews?: boolean }) => ipcRenderer.invoke('store:setAppSettings', v),
 };
