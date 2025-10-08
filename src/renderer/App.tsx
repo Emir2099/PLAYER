@@ -252,9 +252,11 @@ const Library: React.FC = () => {
       setInsights({ totalMinutes, last14Minutes: last14Total, totalItems: allPaths.length, byExt, byFolder, recent });
       try {
         const agg = await window.api.getDailyTotals(30);
-        const minutes = agg.seconds.map(s => Math.round(s/60));
+        const minutes = agg.seconds.map((s: number) => Math.round(s/60));
         setDailyTotals({ dates: agg.dates, minutes });
-      } catch { setDailyTotals({ dates: [], minutes: [] }); }
+      } catch {
+        setDailyTotals({ dates: [], minutes: [] });
+      }
     } catch {
       setInsights(null);
     } finally {
@@ -558,11 +560,8 @@ const Library: React.FC = () => {
           </div>
         )}
 
-  {/* Grid: GLOBAL shows folder/videos; LIBRARY shows selected category */}
-        <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
         {activeTab==='INSIGHTS' ? (
           <div className="px-8 pb-12 w-full max-w-7xl mx-auto">
-            {/* KPI row: auto-fit into 1–3 columns based on width */}
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
               <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-sky-900/40 via-slate-900/50 to-indigo-900/40 border border-slate-800">
                 <div className="text-slate-400 text-sm">Total watch time</div>
@@ -580,10 +579,7 @@ const Library: React.FC = () => {
                 <div className="text-slate-400 text-xs mt-2">can resume where you left off</div>
               </div>
             </div>
-
-            {/* Detail row: auto-fit into 1–3 columns, larger min width for charts */}
             <div className="grid gap-6 mt-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
-              {/* Sparkline card */}
               <div className="rounded-xl p-5 bg-steam-panel border border-slate-800">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-slate-200 font-semibold">Daily minutes (30d)</div>
@@ -629,12 +625,25 @@ const Library: React.FC = () => {
                 </div>
               </div>
             </div>
-
             <div className="mt-6 col-span-full w-full rounded-xl p-5 bg-steam-panel border border-slate-800">
               <div className="text-slate-200 font-semibold mb-3">Recently watched</div>
               <div className="grid gap-4 w-full" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
                 {(insights?.recent||[]).map((r)=> (
-                  <button key={r.path} onClick={()=> setSelected(videos.find(v=>v.path===r.path) || null)} className="block w-full rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors">
+                  <button
+                    key={r.path}
+                    onClick={async ()=>{
+                      const local = videos.find(v=>v.path===r.path);
+                      if (local) { setSelected(local); return; }
+                      try {
+                        const vi = await window.api.getVideoItem(r.path);
+                        if (vi) {
+                          try { const meta = await window.api.getMeta(vi.path); Object.assign(vi, meta); } catch {}
+                          setSelected(vi);
+                        }
+                      } catch {}
+                    }}
+                    className="block w-full rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors"
+                  >
                     <div className="aspect-video bg-slate-900/60 overflow-hidden w-full">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" alt={r.name} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No thumbnail</div>}</div>
                     <div className="p-3 text-sm truncate" title={r.name}>{r.name}</div>
                   </button>
@@ -643,8 +652,10 @@ const Library: React.FC = () => {
               </div>
             </div>
           </div>
-        ) : activeTab==='LIBRARY' ? (
-          <>
+        ) : (
+          <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
+            {activeTab==='LIBRARY' ? (
+              <>
             {/* LIBRARY: either category cards list (no selection), category items grid, or drill-in folder videos */}
             {!selectedCategoryId && !libFolderPath && allCategories.length === 0 && (
               <div className="text-slate-400">No categories yet. Use the + in the sidebar to create one.</div>
@@ -826,8 +837,8 @@ const Library: React.FC = () => {
               })
             )}
           </>
-        ) : (
-          <>
+            ) : (
+              <>
         {folders.map(f => {
           const count = folderCounts[f.path];
           const countText = count === undefined ? '…' : `${count} ${count===1?'video':'videos'}`;
@@ -916,9 +927,10 @@ const Library: React.FC = () => {
         {filtered.length === 0 && (
           <div className="text-slate-400">No videos found in this folder. Click "Choose Folder" to select another directory.</div>
         )}
-          </>
+              </>
+            )}
+          </div>
         )}
-        </div>
 
         {categoryMenu && (
           <ContextMenu
