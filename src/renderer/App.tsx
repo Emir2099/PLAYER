@@ -630,13 +630,13 @@ const Library: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-6 rounded-xl p-5 bg-steam-panel border border-slate-800">
+            <div className="mt-6 col-span-full w-full rounded-xl p-5 bg-steam-panel border border-slate-800">
               <div className="text-slate-200 font-semibold mb-3">Recently watched</div>
-              <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+              <div className="grid gap-4 w-full" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' }}>
                 {(insights?.recent||[]).map((r)=> (
-                  <button key={r.path} onClick={()=> setSelected(videos.find(v=>v.path===r.path) || null)} className="rounded bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors">
-                    <div className="aspect-video bg-slate-900/60 overflow-hidden">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" /> : null}</div>
-                    <div className="p-2 text-sm truncate" title={r.name}>{r.name}</div>
+                  <button key={r.path} onClick={()=> setSelected(videos.find(v=>v.path===r.path) || null)} className="block w-full rounded-lg bg-steam-card border border-slate-800 text-left overflow-hidden hover:border-slate-600/80 transition-colors">
+                    <div className="aspect-video bg-slate-900/60 overflow-hidden w-full">{r.thumb ? <img src={r.thumb} className="w-full h-full object-cover" alt={r.name} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">No thumbnail</div>}</div>
+                    <div className="p-3 text-sm truncate" title={r.name}>{r.name}</div>
                   </button>
                 ))}
                 {(!insights || (insights?.recent||[]).length===0) && <div className="text-slate-400 text-sm">No watch history yet</div>}
