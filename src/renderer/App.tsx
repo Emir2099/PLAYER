@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog, FaMinus, FaWindowMaximize, FaWindowRestore, FaTimes } from 'react-icons/fa';
+import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog, FaMinus, FaWindowMaximize, FaWindowRestore, FaTimes, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import SettingsModal from './components/SettingsModal';
 import { ToastProvider, useToast } from './components/Toast';
 import GameCard from './components/GameCard';
@@ -80,6 +80,10 @@ const Library: React.FC = () => {
   const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>([]);
   const [bootOverlay, setBootOverlay] = useState(true);
   const [showTabSwitcher, setShowTabSwitcher] = useState(false);
+  // Sidebar animation: expanded controls width; contentVisible controls fade
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [sidebarContentVisible, setSidebarContentVisible] = useState(true);
+  const sidebarAnimTimers = useRef<number[]>([]);
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -99,6 +103,11 @@ const Library: React.FC = () => {
         const prefs = await window.api.getUiPrefs();
         setSelectedCategoryId(prefs.selectedCategoryId ?? null);
         setActiveTab(prefs.categoryView ? 'LIBRARY' : 'GLOBAL');
+        if (typeof (prefs as any).sidebarOpen === 'boolean') {
+          const open = !!(prefs as any).sidebarOpen;
+          setSidebarExpanded(open);
+          setSidebarContentVisible(open);
+        }
       } catch {}
       setHistory(await window.api.getHistory());
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
@@ -298,7 +307,19 @@ const Library: React.FC = () => {
           <div className="pointer-events-none fixed inset-0 z-40" style={{ background: 'linear-gradient(180deg, rgba(17,24,39,0.85), rgba(17,24,39,0.6))', animation: 'fadeOut 420ms ease forwards' }} />
         )}
         <style>{`@keyframes fadeOut{from{opacity:1}to{opacity:0;visibility:hidden}}`}</style>
-  <div className="w-72 shrink-0 border-r border-slate-800 p-4 hidden md:block min-h-[calc(100vh-2rem)]">
+      <div
+        className={`hidden md:block border-r border-slate-800 min-h-[calc(100vh-2rem)] overflow-hidden transition-all duration-300 ease-in-out`}
+        style={{ width: sidebarExpanded ? '18rem' : '0rem', padding: sidebarExpanded ? '1rem' : '0rem', willChange: 'width, padding' }}
+      >
+        <div
+          style={{
+            opacity: sidebarContentVisible ? 1 : 0,
+            transform: sidebarContentVisible ? 'translateX(0)' : 'translateX(-8px)',
+            transition: 'opacity 220ms ease, transform 220ms ease',
+            pointerEvents: sidebarContentVisible ? 'auto' : 'none',
+            willChange: 'opacity, transform'
+          }}
+        >
         <div className="flex flex-col gap-2">
           <button onClick={chooseFolder} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
             <FaFolderOpen /> Choose Folder
@@ -328,12 +349,40 @@ const Library: React.FC = () => {
             }}
           />
         </div>
-      </div>
+    </div>
+    </div>
 
   <div className="flex-1 flex flex-col min-w-0 min-h-[calc(100vh-2rem)]">
         {/* Top bar / hero */}
         <div className="px-6 pt-4 pb-6 border-b border-slate-800 bg-gradient-to-b from-steam-panel to-transparent">
           <div className="flex items-center gap-3">
+            <button
+              className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+              title={sidebarExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+              onClick={async ()=>{
+                // Clear any pending timers
+                try { sidebarAnimTimers.current.forEach(id => window.clearTimeout(id)); sidebarAnimTimers.current = []; } catch {}
+                if (sidebarExpanded) {
+                  // Collapse sequence: fade content then shrink width
+                  setSidebarContentVisible(false);
+                  const t = window.setTimeout(() => {
+                    setSidebarExpanded(false);
+                    (window.api.setUiPrefs as any)({ sidebarOpen: false }).catch(()=>{});
+                  }, 230);
+                  sidebarAnimTimers.current.push(t);
+                } else {
+                  // Expand sequence: expand width then fade content in
+                  setSidebarExpanded(true);
+                  (window.api.setUiPrefs as any)({ sidebarOpen: true }).catch(()=>{});
+                  const t = window.setTimeout(() => {
+                    setSidebarContentVisible(true);
+                  }, 320);
+                  sidebarAnimTimers.current.push(t);
+                }
+              }}
+            >
+              {sidebarExpanded ? <FaChevronLeft size={14} /> : <FaChevronRight size={14} />}
+            </button>
             <div className="text-2xl font-bold tracking-tight">Steam-like Player</div>
             <div className="ml-auto flex gap-2 md:hidden">
               <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
