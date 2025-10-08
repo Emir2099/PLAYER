@@ -292,13 +292,13 @@ const Library: React.FC = () => {
           </div>
         </div>
       </div>
-      <div className="flex pt-8">
+  <div className="flex pt-8 min-h-[calc(100vh-2rem)] items-stretch">
         {/* Boot overlay for extra smoothness after splash window */}
         {bootOverlay && (
           <div className="pointer-events-none fixed inset-0 z-40" style={{ background: 'linear-gradient(180deg, rgba(17,24,39,0.85), rgba(17,24,39,0.6))', animation: 'fadeOut 420ms ease forwards' }} />
         )}
         <style>{`@keyframes fadeOut{from{opacity:1}to{opacity:0;visibility:hidden}}`}</style>
-      <div className="w-72 shrink-0 border-r border-slate-800 p-4 hidden md:block">
+  <div className="w-72 shrink-0 border-r border-slate-800 p-4 hidden md:block min-h-[calc(100vh-2rem)]">
         <div className="flex flex-col gap-2">
           <button onClick={chooseFolder} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
             <FaFolderOpen /> Choose Folder
@@ -330,7 +330,7 @@ const Library: React.FC = () => {
         </div>
       </div>
 
-  <div className="flex-1 flex flex-col min-w-0">
+  <div className="flex-1 flex flex-col min-w-0 min-h-[calc(100vh-2rem)]">
         {/* Top bar / hero */}
         <div className="px-6 pt-4 pb-6 border-b border-slate-800 bg-gradient-to-b from-steam-panel to-transparent">
           <div className="flex items-center gap-3">
