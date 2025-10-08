@@ -33,6 +33,12 @@ declare interface Window {
   getDailyTotals: (days?: number) => Promise<{ dates: string[]; seconds: number[] }>;
     getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
     setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
+  // Achievements
+  getAchievements: () => Promise<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: any[]; notify?: boolean }>>;
+  setAchievements: (defs: Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: any[]; notify?: boolean }>) => Promise<boolean>;
+  getAchievementState: () => Promise<Record<string, { id: string; unlockedAt?: string; progress?: { current: number; target: number }; lastEvaluatedAt?: string }>>;
+  resetAchievementState: (id?: string) => Promise<boolean>;
+  onAchievementUnlocked: (cb: (payload: { id: string; name: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary' }) => void) => () => void;
     // UI prefs
     getUiPrefs: () => Promise<{ selectedCategoryId: string | null; categoryView: boolean }>;
     setUiPrefs: (v: { selectedCategoryId?: string | null; categoryView?: boolean }) => Promise<boolean>;
