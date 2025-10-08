@@ -139,18 +139,22 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) =
   };
 
   return (
-    <div className="rounded-lg border border-slate-700 p-3 w-full max-w-xl mx-auto">
-      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+    <div className="rounded-xl border border-slate-700 bg-steam-card p-6">
+      {/* Name Row */}
+      <div className="mb-4">
+        <div className="text-xs text-slate-400 mb-1.5">Name</div>
+        <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={name} onChange={e=>setName(e.target.value)} />
+      </div>
+
+      {/* Icon and Rarity Row */}
+      <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Name</div>
-          <input className="w-full bg-slate-800 rounded px-2 py-1" value={name} onChange={e=>setName(e.target.value)} />
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <input className="flex-1 bg-slate-800 rounded px-2 py-1 min-w-0" value={icon} onChange={e=>setIcon(e.target.value)} />
+          <div className="text-xs text-slate-400 mb-1.5">Icon</div>
+          <div className="flex gap-2">
+            <input className="flex-1 bg-slate-800 rounded-md px-3 h-10 text-sm" value={icon} onChange={e=>setIcon(e.target.value)} />
             <button
               type="button"
-              className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-xs whitespace-nowrap"
+              className="px-4 h-10 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm whitespace-nowrap flex-shrink-0"
               onClick={async ()=>{
                 try {
                   const sel = await window.api.selectFile?.([{ name: 'Images', extensions: ['png','jpg','jpeg','gif','webp'] }]);
@@ -167,24 +171,28 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) =
           )}
         </div>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Rarity</div>
-          <select className="w-full bg-slate-800 rounded px-2 py-1" value={rarity} onChange={e=>setRarity(e.target.value as any)}>
+          <div className="text-xs text-slate-400 mb-1.5">Rarity</div>
+          <select className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={rarity} onChange={e=>setRarity(e.target.value as any)}>
             <option value="common">common</option>
             <option value="rare">rare</option>
             <option value="epic">epic</option>
             <option value="legendary">legendary</option>
           </select>
         </div>
-        <div className="col-span-full">
-          <div className="text-xs text-slate-400 mb-1">Description</div>
-          <input className="w-full bg-slate-800 rounded px-2 py-1" value={description} onChange={e=>setDescription(e.target.value)} />
-        </div>
       </div>
-      <div className="mt-4 text-slate-200 font-semibold">Rule</div>
-  <div className="grid gap-3 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+
+      {/* Description Row */}
+      <div className="mb-5">
+        <div className="text-xs text-slate-400 mb-1.5">Description</div>
+        <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={description} onChange={e=>setDescription(e.target.value)} />
+      </div>
+
+      {/* Rule Section */}
+      <div className="mt-5 mb-2 text-slate-200 font-semibold">Rule</div>
+      <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Metric</div>
-          <select className="w-full bg-slate-800 rounded px-2 py-1" value={metric} onChange={e=>setMetric(e.target.value as any)}>
+          <div className="text-xs text-slate-400 mb-1.5">Metric</div>
+          <select className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={metric} onChange={e=>setMetric(e.target.value as any)}>
             <option value="minutes">minutes (total)</option>
             <option value="uniqueVideos">unique videos</option>
             <option value="videosCompleted">videos completed</option>
@@ -192,8 +200,8 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) =
           </select>
         </div>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Operator</div>
-          <select className="w-full bg-slate-800 rounded px-2 py-1" value={operator} onChange={e=>setOperator(e.target.value as any)}>
+          <div className="text-xs text-slate-400 mb-1.5">Operator</div>
+          <select className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={operator} onChange={e=>setOperator(e.target.value as any)}>
             <option value=">=">&gt;=</option>
             <option value="==">==</option>
             <option value="<=">&lt;=</option>
@@ -202,30 +210,34 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) =
           </select>
         </div>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Target</div>
-          <input type="number" className="w-full bg-slate-800 rounded px-2 py-1" value={target} onChange={e=>setTarget(parseInt(e.target.value||'0',10))} />
+          <div className="text-xs text-slate-400 mb-1.5">Target</div>
+          <input type="number" className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={target} onChange={e=>setTarget(parseInt(e.target.value||'0',10))} />
         </div>
         {metric==='minutesInWindow' && (
           <div>
-            <div className="text-xs text-slate-400 mb-1">Rolling days</div>
-            <input type="number" className="w-full bg-slate-800 rounded px-2 py-1" value={rollingDays} onChange={e=>setRollingDays(parseInt(e.target.value||'7',10))} />
+            <div className="text-xs text-slate-400 mb-1.5">Rolling days</div>
+            <input type="number" className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={rollingDays} onChange={e=>setRollingDays(parseInt(e.target.value||'7',10))} />
           </div>
         )}
       </div>
-      <div className="mt-4 text-slate-200 font-semibold">Filters (optional)</div>
-  <div className="grid gap-3 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+
+      {/* Filters Section */}
+      <div className="mt-5 mb-2 text-slate-200 font-semibold">Filters (optional)</div>
+      <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Extensions (comma-separated)</div>
-          <input className="w-full bg-slate-800 rounded px-2 py-1" placeholder="mp4,mkv" value={exts} onChange={e=>setExts(e.target.value)} />
+          <div className="text-xs text-slate-400 mb-1.5">Extensions (comma-separated)</div>
+          <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" placeholder="mp4,mkv" value={exts} onChange={e=>setExts(e.target.value)} />
         </div>
         <div>
-          <div className="text-xs text-slate-400 mb-1">Categories (ids or names, comma-separated)</div>
-          <input className="w-full bg-slate-800 rounded px-2 py-1" value={cats} onChange={e=>setCats(e.target.value)} />
+          <div className="text-xs text-slate-400 mb-1.5">Categories (ids or names, comma-separated)</div>
+          <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={cats} onChange={e=>setCats(e.target.value)} />
         </div>
       </div>
-      <div className="mt-4 flex gap-2">
-        <button onClick={save} className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-sm">Save</button>
-        <button onClick={onClose} className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
+
+      {/* Action Buttons */}
+      <div className="mt-6 flex gap-3">
+        <button onClick={save} className="px-4 py-2 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-sm">Save</button>
+        <button onClick={onClose} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
       </div>
     </div>
   );
@@ -1039,6 +1051,18 @@ const AchievementList: React.FC = () => {
               )}
             </div>
           </div>
+        ) : activeTab==='ACHIEVEMENTS' ? (
+          <div className="px-8 pb-12 w-full">
+            <div className="flex items-center justify-between mb-6">
+              <div className="text-slate-200 text-xl font-semibold">Achievements</div>
+              <button onClick={()=> setShowEditor(true)} className="px-4 py-2 rounded-md bg-sky-700 hover:bg-sky-600 text-white text-sm">Create</button>
+            </div>
+            {showEditor ? (
+              <InlineAchievementEditor onClose={()=> setShowEditor(false)} />
+            ) : (
+              <AchievementList />
+            )}
+          </div>
         ) : (
           <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
             {activeTab==='LIBRARY' ? (
@@ -1224,20 +1248,6 @@ const AchievementList: React.FC = () => {
               })
             )}
           </>
-            ) : activeTab==='ACHIEVEMENTS' ? (
-              <div className="px-8 pb-12 w-full max-w-7xl mx-auto">
-                <div className="rounded-xl p-5 bg-steam-panel border border-slate-800 overflow-x-hidden">
-                  <div className="flex items-center justify-between gap-3 pr-1 mb-4">
-                    <div className="text-slate-200 font-semibold">Achievements</div>
-                    <button onClick={()=> setShowEditor(true)} className="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-white text-sm">Create</button>
-                  </div>
-                  {showEditor ? (
-                    <InlineAchievementEditor onClose={()=> setShowEditor(false)} />
-                  ) : (
-                    <AchievementList />
-                  )}
-                </div>
-              </div>
             ) : (
               <>
         {folders.map(f => {
