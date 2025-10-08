@@ -79,6 +79,7 @@ const Library: React.FC = () => {
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>([]);
   const [bootOverlay, setBootOverlay] = useState(true);
+  const [showTabSwitcher, setShowTabSwitcher] = useState(false);
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -307,18 +308,22 @@ const Library: React.FC = () => {
         <div className="mt-4">
           <CategoryList
             onSelect={async (catId)=>{
+              if (activeTab !== 'LIBRARY') {
+                setActiveTab('LIBRARY');
+                await window.api.setUiPrefs({ categoryView: true });
+              }
               setSelectedCategoryId(catId);
               setLibFolderPath(null);
               setLibFolderVideos([]);
               if (!catId) {
                 setCategoryItems([]);
-                await window.api.setUiPrefs({ selectedCategoryId: null, categoryView: activeTab==='LIBRARY' });
+                await window.api.setUiPrefs({ selectedCategoryId: null, categoryView: true });
                 return;
               }
               const all = await window.api.getCategories();
               const c = all.find((x:any)=>x.id===catId);
               setCategoryItems(c?.items || []);
-              await window.api.setUiPrefs({ selectedCategoryId: catId, categoryView: activeTab==='LIBRARY' });
+              await window.api.setUiPrefs({ selectedCategoryId: catId, categoryView: true });
               await hydrateCategoryItems(c?.items || []);
             }}
           />
@@ -339,36 +344,11 @@ const Library: React.FC = () => {
               </button>
             </div>
           </div>
-          <div className="mt-4 flex gap-3 items-center">
-            <div className="flex items-center gap-2 bg-steam-panel rounded px-3 py-2 w-full max-w-xl">
-              <FaSearch className="text-slate-400" />
-              <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search your library"
-                className="bg-transparent outline-none w-full text-slate-200 placeholder:text-slate-500"
-              />
-            </div>
-            <select
-              value={sort}
-              onChange={e => setSort(e.target.value as SortKey)}
-              className="bg-steam-panel text-slate-200 rounded px-3 py-2 border border-slate-800"
-            >
-              <option value="recent">Recently Added</option>
-              <option value="name">Name</option>
-              <option value="size">Size</option>
-            </select>
-            <div className="text-slate-400 text-sm truncate max-w-[40%] hidden md:block" title={folder}>{folder}</div>
-          </div>
-        </div>
-
-        {/* Tabs + Breadcrumbs */}
-        <div className="px-6 pt-2 flex items-center gap-2">
-          <div className="inline-flex rounded overflow-hidden border border-slate-800">
+          {/* Tabs in hero */}
+          <div className="mt-1 flex items-center gap-8 text-sm select-none">
             <button
-              className={`px-3 py-1.5 ${activeTab==='GLOBAL'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`}
+              className={`px-1 py-1 tracking-wide ${activeTab==='GLOBAL' ? 'text-sky-300 border-b-2 border-sky-400' : 'text-slate-300 hover:text-slate-100'}`}
               onClick={async ()=>{
-                // Switch to GLOBAL: clear category selection so LIBRARY shows category cards next time
                 setActiveTab('GLOBAL');
                 setSelectedCategoryId(null);
                 setCategoryItems([]);
@@ -378,7 +358,7 @@ const Library: React.FC = () => {
               }}
             >GLOBAL</button>
             <button
-              className={`px-3 py-1.5 ${activeTab==='LIBRARY'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`}
+              className={`px-1 py-1 tracking-wide ${activeTab==='LIBRARY' ? 'text-sky-300 border-b-2 border-sky-400' : 'text-slate-300 hover:text-slate-100'}`}
               onClick={async ()=>{
                 setActiveTab('LIBRARY');
                 await window.api.setUiPrefs({ categoryView: true });
@@ -386,6 +366,9 @@ const Library: React.FC = () => {
             >LIBRARY</button>
           </div>
         </div>
+
+  {/* Breadcrumbs */}
+  <div className="px-6 pt-2 flex items-center gap-2"></div>
         <div className="px-8 py-3">
           <div className="text-sm text-slate-300/90 overflow-x-auto whitespace-nowrap scrollbar-thin pr-2">
             {(() => {
@@ -420,6 +403,30 @@ const Library: React.FC = () => {
             })()}
           </div>
         </div>
+
+        {/* Search and sort toolbar (lower layout, under breadcrumbs) - visible in LIBRARY */}
+        {activeTab==='LIBRARY' && (
+          <div className="px-8 pb-2 flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-steam-panel rounded px-3 py-2 w-full max-w-xl">
+              <FaSearch className="text-slate-400" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search your library"
+                className="bg-transparent outline-none w-full text-slate-200 placeholder:text-slate-500"
+              />
+            </div>
+            <select
+              value={sort}
+              onChange={e => setSort(e.target.value as SortKey)}
+              className="bg-steam-panel text-slate-200 rounded px-3 py-2 border border-slate-800"
+            >
+              <option value="recent">Recently Added</option>
+              <option value="name">Name</option>
+              <option value="size">Size</option>
+            </select>
+          </div>
+        )}
 
   {/* Grid: GLOBAL shows folder/videos; LIBRARY shows selected category */}
         <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
