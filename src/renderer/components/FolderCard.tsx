@@ -6,13 +6,23 @@ type Props = {
   meta?: string;
   onOpen?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  onDropImage?: (filePath: string) => void;
 };
 
-const FolderCard: React.FC<Props> = ({ title, cover, meta, onOpen, onContextMenu }) => {
+const FolderCard: React.FC<Props> = ({ title, cover, meta, onOpen, onContextMenu, onDropImage }) => {
   return (
     <div
       onClick={onOpen}
       onContextMenu={onContextMenu}
+      onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+      onDrop={(e)=>{
+        e.preventDefault();
+        const f = e.dataTransfer.files?.[0];
+        if (!f) return;
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        if (!['jpg','jpeg','png','webp'].includes(ext)) return;
+        onDropImage?.(f.path);
+      }}
       className="group relative rounded-[10px] overflow-hidden border border-[#1c2636] bg-[#131a24] hover:border-[#2f3f59] transition-all duration-200 shadow-[0_1px_0_#0b111a_inset,0_0_0_1px_rgba(0,0,0,0.4)] hover:shadow-[0_1px_0_#0b111a_inset,0_0_0_1px_rgba(0,0,0,0.4),0_12px_30px_rgba(0,0,0,0.35)] cursor-pointer"
       style={{ aspectRatio: '10 / 16' }}
       title={title}

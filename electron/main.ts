@@ -414,6 +414,18 @@ ipcMain.handle('folder:setCover', async (_e, folderPath: string, sourceImagePath
   }
 });
 
+ipcMain.handle('folder:clearCover', async (_e, folderPath: string) => {
+  try {
+    const map = (store.get('folderCovers') as Record<string, string>) || {};
+    // Do not remove any files from disk; only clear the association
+    delete map[folderPath];
+    store.set('folderCovers', map);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
 ipcMain.handle('store:getLastFolder', () => {
   try { return store.get('lastFolder'); } catch { return undefined; }
 });

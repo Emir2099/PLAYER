@@ -9,6 +9,7 @@ const api = {
   listFolders: (dir) => ipcRenderer.invoke('fs:listFolders', dir),
   getFolderCovers: () => ipcRenderer.invoke('folder:getCovers'),
   setFolderCover: (folderPath, imagePath) => ipcRenderer.invoke('folder:setCover', folderPath, imagePath),
+  clearFolderCover: (folderPath) => ipcRenderer.invoke('folder:clearCover', folderPath),
   getLastFolder: () => ipcRenderer.invoke('store:getLastFolder'),
   setLastFolder: (dir) => ipcRenderer.invoke('store:setLastFolder', dir),
   getHistory: () => ipcRenderer.invoke('history:get'),

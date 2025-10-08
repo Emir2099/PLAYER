@@ -18,6 +18,7 @@ declare interface Window {
   listFolders: (dir: string) => Promise<Array<{ path: string; name: string; mtime: number }>>;
   getFolderCovers: () => Promise<Record<string, string>>;
   setFolderCover: (folderPath: string, imagePath: string) => Promise<{ ok: boolean; url?: string; error?: string }>;
+  clearFolderCover: (folderPath: string) => Promise<boolean>;
     getLastFolder: () => Promise<string | undefined>;
     setLastFolder: (dir: string) => Promise<boolean>;
     getHistory: () => Promise<Record<string, number>>;

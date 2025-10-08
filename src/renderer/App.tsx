@@ -5,6 +5,7 @@ import { ToastProvider, useToast } from './components/Toast';
 import GameCard from './components/GameCard';
 import FolderCard from './components/FolderCard';
 import HoverOverlay from './components/HoverOverlay';
+import ContextMenu from './components/ContextMenu';
 
 // Types mirrored from preload
 export type VideoItem = {
@@ -46,6 +47,7 @@ const Library: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [folders, setFolders] = useState<Array<{ path: string; name: string; mtime: number }>>([]);
   const [folderCovers, setFolderCovers] = useState<Record<string, string>>({});
+  const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [selected, setSelected] = useState<VideoItem | null>(null);
@@ -62,21 +64,42 @@ const Library: React.FC = () => {
   const hoverDelayRef = useRef<number | null>(null);
   const watchTimerRef = useRef<{ path: string; lastTick: number } | null>(null);
   const posSaveTickRef = useRef<number>(0);
+  const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
+
+  const navigateTo = async (dir: string) => {
+    setFolder(dir);
+    await window.api.setLastFolder(dir);
+    // Only load immediate videos in the current directory (not recursive)
+    const items = await window.api.scanVideos(dir, { recursive: false });
+    setVideos(items);
+    try { setFolders(await window.api.listFolders(dir)); } catch {}
+    refreshMeta(items);
+  };
 
   useEffect(() => {
     (async () => {
       const last = await window.api.getLastFolder();
       const base = last && last.length ? last : await window.api.homeDir();
-      setFolder(base);
       setHistory(await window.api.getHistory());
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
       try { setAppSettings(await window.api.getAppSettings()); } catch {}
-      const items = await window.api.scanVideos(base, { recursive: true, depth: 3 });
-      setVideos(items);
-      try { setFolders(await window.api.listFolders(base)); } catch {}
-      refreshMeta(items);
+      await navigateTo(base);
     })();
   }, []);
+
+  // Lazy compute folder video counts for visible folders
+  useEffect(() => {
+    (async () => {
+      const toCheck = folders.slice(0, 30).filter(f => folderCounts[f.path] === undefined);
+      if (toCheck.length === 0) return;
+      for (const f of toCheck) {
+        try {
+          const vids = await window.api.scanVideos(f.path, { recursive: true, depth: 3 });
+          setFolderCounts(prev => ({ ...prev, [f.path]: vids.length }));
+        } catch {}
+      }
+    })();
+  }, [folders]);
 
   const filtered = useMemo<VideoItem[]>(() => {
     let list = videos;
@@ -97,13 +120,8 @@ const Library: React.FC = () => {
   const chooseFolder = async () => {
     const sel = await window.api.selectFolder();
     if (sel) {
-      setFolder(sel);
-      await window.api.setLastFolder(sel);
-      const items = await window.api.scanVideos(sel, { recursive: true, depth: 3 });
-      setVideos(items);
-      try { setFolders(await window.api.listFolders(sel)); } catch {}
+      await navigateTo(sel);
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
-      refreshMeta(items);
     }
   };
 
@@ -123,7 +141,6 @@ const Library: React.FC = () => {
               const el = entry.target as HTMLElement;
               const p = el.getAttribute('data-path');
               if (!p) continue;
-              // unobserve to avoid duplicate fetches
               ioRef.current?.unobserve(el);
               window.api.getMeta(p).then(meta => setVideos(prev => prev.map(x => x.path === p ? { ...x, ...meta } : x)));
             }
@@ -146,21 +163,10 @@ const Library: React.FC = () => {
       show('FFmpeg and FFprobe are configured', { type: 'success' });
     }
   };
-
   return (
-    <div className="min-h-screen flex bg-[#0b0f15] text-slate-100">
-      {/* Sidebar */}
-      <div className="w-64 border-r border-slate-800 bg-steam-panel hidden md:flex md:flex-col">
-        <div className="px-4 py-4 text-lg font-semibold">Library</div>
-        <div className="px-2 pb-4 space-y-1">
-          {categories.map(cat => (
-            <button key={cat} onClick={()=>setActiveCategory(cat)} className={`w-full text-left px-3 py-2 rounded hover:bg-slate-700/60 ${activeCategory===cat?'bg-slate-700/60':''}`}>{cat}</button>
-          ))}
-        </div>
-        <div className="mt-auto p-3 space-y-2">
-          <button onClick={() => setShowSettings(true)} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
-            <FaCog /> Settings
-          </button>
+    <div className="min-h-screen bg-steam-bg text-slate-200 flex">
+      <div className="w-72 shrink-0 border-r border-slate-800 p-4 hidden md:block">
+        <div className="flex flex-col gap-2">
           <button onClick={chooseFolder} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
             <FaFolderOpen /> Choose Folder
           </button>
@@ -205,34 +211,67 @@ const Library: React.FC = () => {
           </div>
         </div>
 
+        {/* Breadcrumbs */}
+        <div className="px-8 py-3">
+          <div className="text-sm text-slate-300/90 overflow-x-auto whitespace-nowrap scrollbar-thin pr-2">
+            {(() => {
+              const segs: Array<{ label: string; path: string }> = [];
+              if (/^[A-Za-z]:\\/.test(folder)) {
+                const drive = folder.slice(0, 3);
+                segs.push({ label: drive, path: drive });
+                const rest = folder.slice(3).split('\\').filter(Boolean);
+                let acc = drive;
+                for (const part of rest) {
+                  acc = acc.endsWith('\\') ? acc + part : acc + '\\' + part;
+                  segs.push({ label: part, path: acc });
+                }
+              } else if (folder) {
+                const rest = folder.split('\\').filter(Boolean);
+                let acc = '';
+                for (const part of rest) {
+                  acc = acc ? acc + '\\' + part : part;
+                  segs.push({ label: part, path: acc });
+                }
+              }
+              return (
+                <>
+                  {segs.map((s, i) => (
+                    <span key={s.path}>
+                      {i>0 && <span className="mx-1 text-slate-500">/</span>}
+                      <button className={`hover:underline ${i===segs.length-1? 'text-white' : 'text-slate-200'}`} onClick={() => navigateTo(s.path)}>{s.label}</button>
+                    </span>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
         {/* Grid: Folders (no hover overlay) then videos */}
         <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
-        {folders.map(f => (
-          <div key={`folder-${f.path}`}>
-            <FolderCard
-              title={f.name}
-              cover={folderCovers[f.path]}
-              meta={new Date(f.mtime).toLocaleDateString()}
-              onOpen={async () => {
-                setFolder(f.path);
-                await window.api.setLastFolder(f.path);
-                const items = await window.api.scanVideos(f.path, { recursive: true, depth: 3 });
-                setVideos(items);
-                try { setFolders(await window.api.listFolders(f.path)); } catch {}
-                refreshMeta(items);
-              }}
-              onContextMenu={async (e) => {
-                e.preventDefault();
-                const img = await window.api.selectFile([
-                  { name: 'Images', extensions: ['jpg','jpeg','png','webp'] },
-                ]);
-                if (!img) return;
-                const res = await window.api.setFolderCover(f.path, img);
-                if (res?.ok && res.url) setFolderCovers(prev => ({ ...prev, [f.path]: res.url! }));
-              }}
-            />
-          </div>
-        ))}
+        {folders.map(f => {
+          const count = folderCounts[f.path];
+          const countText = count === undefined ? '…' : `${count} ${count===1?'video':'videos'}`;
+          return (
+            <div key={`folder-${f.path}`}>
+              <FolderCard
+                title={f.name}
+                cover={folderCovers[f.path]}
+                meta={`${countText} • ${new Date(f.mtime).toLocaleDateString()}`}
+                onOpen={() => navigateTo(f.path)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setFolderMenu({ x: e.clientX, y: e.clientY, path: f.path });
+                }}
+                onDropImage={async (imgPath) => {
+                  const res = await window.api.setFolderCover(f.path, imgPath);
+                  if (res?.ok && res.url) setFolderCovers(prev => ({ ...prev, [f.path]: res.url! }));
+                }}
+              />
+            </div>
+          );
+        })}
         {filtered.map(v => (
           <div
             key={v.path}
@@ -286,6 +325,35 @@ const Library: React.FC = () => {
           <div className="text-slate-400">No videos found in this folder. Click "Choose Folder" to select another directory.</div>
         )}
         </div>
+
+        {folderMenu && (
+          <ContextMenu
+            x={folderMenu.x}
+            y={folderMenu.y}
+            onClose={() => setFolderMenu(null)}
+            items={[
+              {
+                label: 'Set cover image…',
+                onClick: async () => {
+                  const img = await window.api.selectFile([{ name: 'Images', extensions: ['jpg','jpeg','png','webp'] }]);
+                  setFolderMenu(null);
+                  if (!img) return;
+                  const res = await window.api.setFolderCover(folderMenu.path, img);
+                  if (res?.ok && res.url) setFolderCovers(prev => ({ ...prev, [folderMenu.path]: res.url! }));
+                }
+              },
+              {
+                label: 'Reset cover',
+                onClick: async () => {
+                  await window.api.clearFolderCover(folderMenu.path);
+                  setFolderCovers(prev => { const n = { ...prev }; delete n[folderMenu.path]; return n; });
+                  setFolderMenu(null);
+                }
+              },
+              { label: 'Open in Explorer', onClick: async () => { await window.api.revealInExplorer(folderMenu.path); setFolderMenu(null); } },
+            ]}
+          />
+        )}
 
         <HoverOverlay
           open={!!hoverRect && !!hoverPayload}
