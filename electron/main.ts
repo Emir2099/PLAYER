@@ -38,6 +38,7 @@ type Settings = {
   enableHoverPreviews?: boolean;
   folderCovers?: Record<string, string>; // folder path -> file:/// url
   categories?: Category[];
+  categoryCovers?: Record<string, string>; // category id -> file:/// url
   uiPrefs?: { selectedCategoryId?: string | null; categoryView?: boolean };
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
@@ -191,6 +192,11 @@ function getThumbDir() {
 
 function getFolderCoversDir() {
   const dir = path.join(app.getPath('userData'), 'folder-covers');
+  return dir;
+}
+
+function getCategoryCoversDir() {
+  const dir = path.join(app.getPath('userData'), 'category-covers');
   return dir;
 }
 
@@ -458,6 +464,41 @@ ipcMain.handle('folder:clearCover', async (_e, folderPath: string) => {
     // Do not remove any files from disk; only clear the association
     delete map[folderPath];
     store.set('folderCovers', map);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+// Category covers: mirror folder cover behavior, but keyed by category id
+ipcMain.handle('category:getCovers', () => {
+  try { return (store.get('categoryCovers') as Record<string, string>) || {}; } catch { return {}; }
+});
+
+ipcMain.handle('category:setCover', async (_e, categoryId: string, sourceImagePath: string) => {
+  try {
+    const coversDir = getCategoryCoversDir();
+    await ensureDir(coversDir);
+    const ext = path.extname(sourceImagePath) || '.jpg';
+    const name = hashPath(categoryId) + ext.toLowerCase();
+    const dest = path.join(coversDir, name);
+    try { await fs.copyFile(sourceImagePath, dest); } catch {}
+    const url = 'file:///' + dest.replace(/\\/g, '/');
+    const encoded = encodeURI(url);
+    const map = (store.get('categoryCovers') as Record<string, string>) || {};
+    map[categoryId] = encoded;
+    store.set('categoryCovers', map);
+    return { ok: true, url: encoded };
+  } catch (e) {
+    return { ok: false, error: String((e as any)?.message || e) };
+  }
+});
+
+ipcMain.handle('category:clearCover', async (_e, categoryId: string) => {
+  try {
+    const map = (store.get('categoryCovers') as Record<string, string>) || {};
+    delete map[categoryId];
+    store.set('categoryCovers', map);
     return true;
   } catch {
     return false;

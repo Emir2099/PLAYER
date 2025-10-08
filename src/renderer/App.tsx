@@ -7,6 +7,7 @@ import FolderCard from './components/FolderCard';
 import HoverOverlay from './components/HoverOverlay';
 import ContextMenu from './components/ContextMenu';
 import CategoryList from './components/CategoryList';
+import CategoryCard from './components/CategoryCard';
 
 // Types mirrored from preload
 export type VideoItem = {
@@ -73,6 +74,9 @@ const Library: React.FC = () => {
   const [categoryFolderMap, setCategoryFolderMap] = useState<Record<string, { path: string; name: string; mtime: number }>>({});
   const [libFolderPath, setLibFolderPath] = useState<string | null>(null);
   const [libFolderVideos, setLibFolderVideos] = useState<VideoItem[]>([]);
+  const [categoryCovers, setCategoryCovers] = useState<Record<string, string>>({});
+  const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>([]);
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -95,10 +99,23 @@ const Library: React.FC = () => {
       } catch {}
       setHistory(await window.api.getHistory());
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
+      try { setCategoryCovers(await window.api.getCategoryCovers()); } catch {}
       try { setAppSettings(await window.api.getAppSettings()); } catch {}
       await navigateTo(base);
     })();
   }, []);
+
+  // Load categories list when showing LIBRARY without a selected category
+  useEffect(() => {
+    (async () => {
+      if (activeTab === 'LIBRARY' && !selectedCategoryId && !libFolderPath) {
+        try {
+          const cats = await window.api.getCategories();
+          setAllCategories(cats as any);
+        } catch {}
+      }
+    })();
+  }, [activeTab, selectedCategoryId, libFolderPath]);
 
   // Lazy compute folder video counts for visible folders
   useEffect(() => {
@@ -294,8 +311,25 @@ const Library: React.FC = () => {
         {/* Tabs + Breadcrumbs */}
         <div className="px-6 pt-2 flex items-center gap-2">
           <div className="inline-flex rounded overflow-hidden border border-slate-800">
-            <button className={`px-3 py-1.5 ${activeTab==='GLOBAL'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`} onClick={async ()=>{ setActiveTab('GLOBAL'); await window.api.setUiPrefs({ categoryView: false }); }}>GLOBAL</button>
-            <button className={`px-3 py-1.5 ${activeTab==='LIBRARY'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`} onClick={async ()=>{ setActiveTab('LIBRARY'); await window.api.setUiPrefs({ categoryView: true }); }}>LIBRARY</button>
+            <button
+              className={`px-3 py-1.5 ${activeTab==='GLOBAL'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`}
+              onClick={async ()=>{
+                // Switch to GLOBAL: clear category selection so LIBRARY shows category cards next time
+                setActiveTab('GLOBAL');
+                setSelectedCategoryId(null);
+                setCategoryItems([]);
+                setLibFolderPath(null);
+                setLibFolderVideos([]);
+                await window.api.setUiPrefs({ categoryView: false, selectedCategoryId: null });
+              }}
+            >GLOBAL</button>
+            <button
+              className={`px-3 py-1.5 ${activeTab==='LIBRARY'?'bg-slate-800 text-white':'bg-slate-900 hover:bg-slate-800/70'}`}
+              onClick={async ()=>{
+                setActiveTab('LIBRARY');
+                await window.api.setUiPrefs({ categoryView: true });
+              }}
+            >LIBRARY</button>
           </div>
         </div>
         <div className="px-8 py-3">
@@ -335,9 +369,12 @@ const Library: React.FC = () => {
 
   {/* Grid: GLOBAL shows folder/videos; LIBRARY shows selected category */}
         <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
-        {activeTab==='LIBRARY' && selectedCategoryId ? (
+        {activeTab==='LIBRARY' ? (
           <>
-            {/* Drill-in breadcrumb for LIBRARY folder view */}
+            {/* LIBRARY: either category cards list (no selection), category items grid, or drill-in folder videos */}
+            {!selectedCategoryId && !libFolderPath && allCategories.length === 0 && (
+              <div className="text-slate-400">No categories yet. Use the + in the sidebar to create one.</div>
+            )}
             {libFolderPath && (
               <div className="col-span-full -mt-2 mb-2 text-sm text-slate-300/90">
                 <button className="text-slate-200 hover:underline" onClick={()=> setLibFolderPath(null)}>Back to category</button>
@@ -345,7 +382,29 @@ const Library: React.FC = () => {
                 <span className="text-slate-100">{libFolderPath.split('\\').pop() || libFolderPath}</span>
               </div>
             )}
-            {libFolderPath ? (
+            {(!selectedCategoryId && !libFolderPath) ? (
+              // Show all categories as cards
+              allCategories.map((c) => (
+                <div key={c.id} onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setCategoryMenu({ x: e.clientX, y: e.clientY, id: c.id }); }}>
+                  <CategoryCard
+                    title={c.name}
+                    cover={categoryCovers[c.id]}
+                    meta={`${c.items.length} ${c.items.length===1?'item':'items'}`}
+                    onOpen={async () => {
+                      setSelectedCategoryId(c.id);
+                      const all = await window.api.getCategories();
+                      const found = all.find((x:any)=>x.id===c.id);
+                      setCategoryItems(found?.items || []);
+                      await hydrateCategoryItems(found?.items || []);
+                    }}
+                    onDropImage={async (imgPath) => {
+                      const res = await window.api.setCategoryCover(c.id, imgPath);
+                      if (res?.ok && res.url) setCategoryCovers(prev => ({ ...prev, [c.id]: res.url! }));
+                    }}
+                  />
+                </div>
+              ))
+            ) : libFolderPath ? (
               libFolderVideos.map((vItem, idx) => (
                 <div key={`lib-folder-video-${idx}`}
                      data-path={vItem.path}
@@ -586,6 +645,34 @@ const Library: React.FC = () => {
           </>
         )}
         </div>
+
+        {categoryMenu && (
+          <ContextMenu
+            x={categoryMenu.x}
+            y={categoryMenu.y}
+            onClose={() => setCategoryMenu(null)}
+            items={[
+              {
+                label: 'Set cover image…',
+                onClick: async () => {
+                  const img = await window.api.selectFile([{ name: 'Images', extensions: ['jpg','jpeg','png','webp'] }]);
+                  if (!img) { setCategoryMenu(null); return; }
+                  const res = await window.api.setCategoryCover(categoryMenu.id, img);
+                  if (res?.ok && res.url) setCategoryCovers(prev => ({ ...prev, [categoryMenu.id]: res.url! }));
+                  setCategoryMenu(null);
+                }
+              },
+              {
+                label: 'Reset cover',
+                onClick: async () => {
+                  await window.api.clearCategoryCover(categoryMenu.id);
+                  setCategoryCovers(prev => { const n = { ...prev }; delete n[categoryMenu.id]; return n; });
+                  setCategoryMenu(null);
+                }
+              },
+            ]}
+          />
+        )}
 
         {folderMenu && (
           <ContextMenu

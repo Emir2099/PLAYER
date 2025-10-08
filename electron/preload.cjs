@@ -36,6 +36,10 @@ const api = {
   // Item fetch helpers for categories
   getVideoItem: (p) => ipcRenderer.invoke('fs:getVideoItem', p),
   getFolderItem: (p) => ipcRenderer.invoke('fs:getFolderItem', p),
+  // Category covers
+  getCategoryCovers: () => ipcRenderer.invoke('category:getCovers'),
+  setCategoryCover: (id, imagePath) => ipcRenderer.invoke('category:setCover', id, imagePath),
+  clearCategoryCover: (id) => ipcRenderer.invoke('category:clearCover'),
 };
 
 contextBridge.exposeInMainWorld('api', api);

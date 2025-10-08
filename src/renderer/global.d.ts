@@ -38,6 +38,10 @@ declare interface Window {
     // Item lookups
     getVideoItem: (filePath: string) => Promise<RenderVideoItem | null>;
     getFolderItem: (dir: string) => Promise<{ path: string; name: string; mtime: number } | null>;
+  // Category covers
+  getCategoryCovers: () => Promise<Record<string, string>>;
+  setCategoryCover: (id: string, imagePath: string) => Promise<{ ok: boolean; url?: string; error?: string }>;
+  clearCategoryCover: (id: string) => Promise<boolean>;
     // Categories
     getCategories: () => Promise<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>;
     createCategory: (name: string) => Promise<{ ok: boolean; category?: { id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }; error?: string }>;
