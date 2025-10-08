@@ -20,6 +20,7 @@ const ffprobeStatic: { path: string } | null = (() => {
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -85,6 +86,24 @@ function getPreloadPath() {
 }
 
 async function createWindow() {
+  // Splash window (borderless, always on top)
+  splashWindow = new BrowserWindow({
+    width: 900,
+    height: 540,
+    resizable: false,
+    movable: true,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#0b0f15',
+    center: true,
+    show: true,
+  });
+  try {
+    const splashPath = path.join(__dirname, 'splash.html');
+    await splashWindow.loadFile(splashPath);
+  } catch {}
+
+  // Main window
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -103,7 +122,22 @@ async function createWindow() {
 
   try { Menu.setApplicationMenu(null); } catch {}
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show());
+  mainWindow.on('ready-to-show', () => {
+    // Gentle coordination with splash: start fade-out then show main
+    (async () => {
+      try {
+        // Trigger splash fade-out by evaluating fadeOut in its context, then wait a short beat
+        try { await splashWindow?.webContents.executeJavaScript('fadeOut(260)'); } catch {}
+        await new Promise(r => setTimeout(r, 200));
+      } catch {}
+      mainWindow?.show();
+      // Close splash shortly after main is visible
+      setTimeout(() => {
+        try { splashWindow?.close(); } catch {}
+        splashWindow = null;
+      }, 200);
+    })();
+  });
   mainWindow.on('closed', () => (mainWindow = null));
 
   // Notify renderer when maximize state changes

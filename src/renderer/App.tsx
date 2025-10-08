@@ -78,6 +78,7 @@ const Library: React.FC = () => {
   const [categoryCovers, setCategoryCovers] = useState<Record<string, string>>({});
   const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; id: string } | null>(null);
   const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>([]);
+  const [bootOverlay, setBootOverlay] = useState(true);
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -103,6 +104,8 @@ const Library: React.FC = () => {
       try { setCategoryCovers(await window.api.getCategoryCovers()); } catch {}
       try { setAppSettings(await window.api.getAppSettings()); } catch {}
       await navigateTo(base);
+      // After initial data is ready, fade out boot overlay
+      setTimeout(() => setBootOverlay(false), 300);
     })();
   }, []);
 
@@ -273,6 +276,11 @@ const Library: React.FC = () => {
         </div>
       </div>
       <div className="flex pt-8">
+        {/* Boot overlay for extra smoothness after splash window */}
+        {bootOverlay && (
+          <div className="pointer-events-none fixed inset-0 z-40" style={{ background: 'linear-gradient(180deg, rgba(17,24,39,0.85), rgba(17,24,39,0.6))', animation: 'fadeOut 420ms ease forwards' }} />
+        )}
+        <style>{`@keyframes fadeOut{from{opacity:1}to{opacity:0;visibility:hidden}}`}</style>
       <div className="w-72 shrink-0 border-r border-slate-800 p-4 hidden md:block">
         <div className="flex flex-col gap-2">
           <button onClick={chooseFolder} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
