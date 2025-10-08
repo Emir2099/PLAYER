@@ -109,6 +109,16 @@ const Library: React.FC = () => {
     })();
   }, []);
 
+  // Remove any initial focus from titlebar buttons to avoid white outline on startup
+  useEffect(() => {
+    try {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && el.classList?.contains('is-win-btn')) {
+        el.blur();
+      }
+    } catch {}
+  }, []);
+
   // Listen to maximize changes and get initial state
   useEffect(() => {
     let off: (() => void) | undefined;
@@ -257,19 +267,25 @@ const Library: React.FC = () => {
   };
   return (
     <div className="min-h-screen bg-steam-bg text-slate-200">
-      <style>{`.titlebar{-webkit-app-region:drag}.no-drag{-webkit-app-region:no-drag}`}</style>
+      <style>{`
+        .titlebar{-webkit-app-region:drag}
+        .no-drag{-webkit-app-region:no-drag}
+        .titlebar .is-win-btn{ outline: none; box-shadow: none; }
+        .titlebar .is-win-btn:focus{ outline: none; box-shadow: none; }
+        .titlebar .is-win-btn:focus-visible{ outline: 2px solid rgba(148,163,184,0.45); outline-offset: 2px; border-radius: 6px; }
+      `}</style>
       {/* Custom Title Bar */}
       <div className="titlebar fixed top-0 left-0 right-0 h-8 z-50 bg-gradient-to-r from-[#0e141c] via-[#111827] to-[#0e141c] border-b border-slate-800/80">
         <div className="h-full flex items-center px-2">
           <div className="text-[12px] text-slate-300/90 tracking-wide">Steam-like Player</div>
           <div className="no-drag ml-auto flex items-center gap-1">
-            <button onClick={() => window.api.winMinimize?.()} className="w-10 h-8 inline-flex items-center justify-center text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors" title="Minimize">
+            <button onClick={() => window.api.winMinimize?.()} className="is-win-btn w-10 h-8 inline-flex items-center justify-center text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors rounded-md" title="Minimize">
               <FaMinus size={12} />
             </button>
-            <button onClick={() => window.api.winToggleMaximize?.()} className="w-10 h-8 inline-flex items-center justify-center text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors" title={isMax ? 'Restore' : 'Maximize'}>
+            <button onClick={() => window.api.winToggleMaximize?.()} className="is-win-btn w-10 h-8 inline-flex items-center justify-center text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors rounded-md" title={isMax ? 'Restore' : 'Maximize'}>
               {isMax ? <FaWindowRestore size={12} /> : <FaWindowMaximize size={12} />}
             </button>
-            <button onClick={() => window.api.winClose?.()} className="w-12 h-8 inline-flex items-center justify-center text-slate-200 hover:bg-red-600/90 hover:text-white transition-colors" title="Close">
+            <button onClick={() => window.api.winClose?.()} className="is-win-btn w-12 h-8 inline-flex items-center justify-center text-slate-200 hover:bg-red-600/90 hover:text-white transition-colors rounded-md" title="Close">
               <FaTimes size={12} />
             </button>
           </div>
