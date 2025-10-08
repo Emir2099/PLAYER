@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { FaCog } from 'react-icons/fa';
+import ContextMenu from './ContextMenu';
 
 type CatItem = { type: 'video' | 'folder'; path: string };
 type Category = { id: string; name: string; items: CatItem[] };
@@ -13,6 +15,7 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null);
 
   const refresh = async () => {
     try {
@@ -93,22 +96,32 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
           >
             <div className="flex items-center justify-between gap-2">
               <span className="truncate" title={c.name}>{c.name}</span>
-              <span className="text-xs text-slate-400">{c.items.length}</span>
-            </div>
-            <div className="mt-1 flex gap-1 opacity-70">
-              <button className="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700" onClick={async (e)=>{
-                e.stopPropagation();
-                const newLabel = prompt('Rename category', c.name) || c.name;
-                if (newLabel && newLabel !== c.name) { await window.api.renameCategory(c.id, newLabel); await refresh(); }
-              }}>Rename</button>
-              <button className="text-[11px] px-1.5 py-0.5 rounded bg-red-900/70 hover:bg-red-800" onClick={async (e)=>{
-                e.stopPropagation();
-                if (confirm(`Delete category "${c.name}"?`)) { await window.api.deleteCategory(c.id); await refresh(); }
-              }}>Delete</button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">{c.items.length}</span>
+                <button
+                  className="p-1 rounded hover:bg-slate-700"
+                  onClick={(e)=>{ e.stopPropagation(); e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: c.id, name: c.name }); }}
+                  aria-label="Category settings"
+                  title="Category settings"
+                >
+                  <FaCog className="text-slate-300" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
       </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={()=>setMenu(null)}
+          items={[
+            { label: 'Rename', onClick: async () => { const newLabel = prompt('Rename category', menu.name) || menu.name; if (newLabel && newLabel !== menu.name) { await window.api.renameCategory(menu.id, newLabel); await refresh(); } } },
+            { label: 'Delete', onClick: async () => { if (confirm(`Delete category "${menu.name}"?`)) { await window.api.deleteCategory(menu.id); if (active===menu.id) { setActive(null); onSelect?.(null); } await refresh(); } } },
+          ]}
+        />
+      )}
     </div>
   );
 };

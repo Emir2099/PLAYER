@@ -237,6 +237,8 @@ const Library: React.FC = () => {
           <CategoryList
             onSelect={async (catId)=>{
               setSelectedCategoryId(catId);
+              setLibFolderPath(null);
+              setLibFolderVideos([]);
               if (!catId) {
                 setCategoryItems([]);
                 await window.api.setUiPrefs({ selectedCategoryId: null, categoryView: activeTab==='LIBRARY' });
