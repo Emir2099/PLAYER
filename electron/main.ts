@@ -41,6 +41,8 @@ type Settings = {
   categories?: Category[];
   categoryCovers?: Record<string, string>; // category id -> file:/// url
   uiPrefs?: { selectedCategoryId?: string | null; categoryView?: boolean };
+  achievements?: AchievementDefinition[];
+  achievementsState?: Record<string, AchievementState>;
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
@@ -194,6 +196,47 @@ export type FolderItem = {
 
 type CatItem = { type: 'video' | 'folder'; path: string };
 type Category = { id: string; name: string; items: CatItem[] };
+
+// ---------------- Achievements ----------------
+type RuleOperator = '>=' | '==' | '<=' | '>' | '<';
+type RuleMetric =
+  | 'minutes'
+  | 'uniqueVideos'
+  | 'videosCompleted'
+  | 'minutesInCategory' // reserved for future
+  | 'countByExt' // reserved for future
+  ;
+type AchievementRule = {
+  trigger?: 'watch-progress' | 'session-end' | 'scan';
+  metric: RuleMetric;
+  operator: RuleOperator;
+  target: number;
+  // Optional filters (MVP ignored, reserved for future)
+  filters?: {
+    categories?: string[];
+    exts?: string[];
+    sizeMB?: { min?: number; max?: number };
+    durationMin?: { min?: number; max?: number };
+    pathIncludes?: string[];
+    pathRegex?: string;
+  };
+  window?: { rollingDays?: number };
+};
+type AchievementDefinition = {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string; // emoji or URL
+  rarity?: 'common'|'rare'|'epic'|'legendary';
+  rules: AchievementRule[];
+  notify?: boolean;
+};
+type AchievementState = {
+  id: string;
+  unlockedAt?: string; // ISO timestamp
+  progress?: { current: number; target: number };
+  lastEvaluatedAt?: string;
+};
 
 const VIDEO_EXTS = new Set([
   'mp4','mkv','avi','mov','wmv','webm','flv','m4v','ts','mts','m2ts'
@@ -599,6 +642,8 @@ ipcMain.handle('history:addWatchTime', (_e, filePath: string, seconds: number) =
     map[dayKey] = (map[dayKey] || 0) + Math.round(seconds);
     daily[filePath] = map;
     store.set('watchDaily', daily);
+    // Evaluate achievements on watch-progress (fire-and-forget)
+    try { void evaluateAchievementsOnProgress(filePath); } catch {}
     return true;
   } catch { return false; }
 });
@@ -621,6 +666,175 @@ ipcMain.handle('history:getStats', (_e, filePath: string) => {
     return { ...base, last14Minutes } as any;
   } catch { return { lastWatched: 0, totalMinutes: 0 }; }
 });
+
+// ---------------- Achievements IPC + evaluator ----------------
+function getAchievements(): AchievementDefinition[] {
+  try { return (store.get('achievements') as AchievementDefinition[]) || []; } catch { return []; }
+}
+function setAchievements(defs: AchievementDefinition[]) {
+  try { store.set('achievements', defs); } catch {}
+}
+function getAchievementState(): Record<string, AchievementState> {
+  try { return (store.get('achievementsState') as Record<string, AchievementState>) || {}; } catch { return {}; }
+}
+function setAchievementState(st: Record<string, AchievementState>) {
+  try { store.set('achievementsState', st); } catch {}
+}
+
+ipcMain.handle('ach:get', () => getAchievements());
+ipcMain.handle('ach:set', (_e, defs: AchievementDefinition[]) => { setAchievements(defs||[]); return true; });
+ipcMain.handle('ach:state:get', () => getAchievementState());
+ipcMain.handle('ach:state:reset', (_e, id?: string) => {
+  const st = getAchievementState();
+  if (id) delete st[id]; else for (const k of Object.keys(st)) delete st[k];
+  setAchievementState(st); return true;
+});
+
+function broadcastAchievementUnlocked(defn: AchievementDefinition) {
+  try { mainWindow?.webContents.send('ach:unlocked', { id: defn.id, name: defn.name, icon: defn.icon, rarity: defn.rarity }); } catch {}
+}
+
+async function evaluateAchievementsOnProgress(_filePath: string) {
+  const defs = getAchievements();
+  if (!defs.length) return;
+  const st = getAchievementState();
+  // Precompute simple aggregates
+  const stats = (store.get('watchStats') as Record<string, { lastWatched: number; totalMinutes: number; lastPositionSec?: number }>) || {};
+  const allPaths = Object.keys(stats);
+  const categories = getCategories();
+  const categoryIndex = categories.map(c => ({ id: c.id, name: c.name, items: c.items }));
+  const extOf = (p: string) => path.extname(p).replace(/^\./, '').toLowerCase();
+
+  // duration cache (in-memory per process)
+  const durCache: Map<string, number> = (evaluateAchievementsOnProgress as any)._durCache || new Map();
+  (evaluateAchievementsOnProgress as any)._durCache = durCache;
+  const getDurationSec = async (p: string): Promise<number | 0> => {
+    if (durCache.has(p)) return durCache.get(p)!;
+    const meta = await getVideoMeta(p);
+    const d = Number(meta?.duration) || 0;
+    if (d > 0) durCache.set(p, d);
+    return d;
+  };
+
+  // Helpers
+  const pathMatchesFilters = (p: string, filters?: AchievementRule['filters']): boolean => {
+    if (!filters) return true;
+    if (filters.exts && filters.exts.length) {
+      if (!filters.exts.map(e => e.toLowerCase()).includes(extOf(p))) return false;
+    }
+    if (filters.categories && filters.categories.length) {
+      const belongs = categoryIndex.some(c => {
+        if (filters.categories!.includes(c.id) || filters.categories!.includes(c.name)) {
+          return (c.items || []).some(it => it.type === 'video' ? it.path === p : p.startsWith(it.path));
+        }
+        return false;
+      });
+      if (!belongs) return false;
+    }
+    // size/duration/path filters reserved for future; skip for now to keep fast
+    return true;
+  };
+
+  const sumMinutes = (paths: string[]) => paths.reduce((s, p) => s + (stats[p]?.totalMinutes || 0), 0);
+
+  const minutesInWindow = (paths: string[], rollingDays: number) => {
+    const daily = (store.get('watchDaily') as Record<string, Record<string, number>>) || {};
+    const today = new Date();
+    let totalSec = 0;
+    for (let i = 0; i < rollingDays; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      for (const p of paths) totalSec += (daily[p]?.[key] || 0);
+    }
+    return Math.round(totalSec / 60);
+  };
+
+  const countCompleted = async (paths: string[]) => {
+    let n = 0;
+    // Limit to 400 to avoid heavy ffprobe bursts
+    for (const p of paths.slice(0, 400)) {
+      const durSec = await getDurationSec(p);
+      const totMin = stats[p]?.totalMinutes || 0;
+      const totSec = Math.round(totMin * 60);
+      const lastPos = stats[p]?.lastPositionSec;
+      const nearEnd = durSec > 0 && typeof lastPos === 'number' && (durSec - lastPos) <= 10;
+      const ratio = durSec > 0 ? (totSec / durSec) : 0;
+      const hasWatchTime = totSec > 0;
+      if (durSec > 0 && hasWatchTime && (ratio >= 0.95 || nearEnd)) n++;
+    }
+    return n;
+  };
+
+  const evaluateRule = async (r: AchievementRule): Promise<{ current: number; ok: boolean }> => {
+    // Prepare filtered paths on demand
+    const fpaths = allPaths.filter(p => pathMatchesFilters(p, r.filters));
+    switch (r.metric) {
+      case 'minutes': {
+        const current = Math.round(sumMinutes(fpaths));
+        return { current, ok: compare(current, r.operator, r.target) };
+      }
+      case 'uniqueVideos': {
+        const current = fpaths.length;
+        return { current, ok: compare(current, r.operator, r.target) };
+      }
+      case 'videosCompleted': {
+        const current = await countCompleted(fpaths);
+        return { current, ok: compare(current, r.operator, r.target) };
+      }
+      case 'minutesInCategory': {
+        // Equivalent to minutes with category filters; already handled by filters
+        const current = Math.round(sumMinutes(fpaths));
+        return { current, ok: compare(current, r.operator, r.target) };
+      }
+      case 'countByExt': {
+        const exts = (r.filters?.exts || []).map(e => e.toLowerCase());
+        const current = exts.length ? fpaths.filter(p => exts.includes(extOf(p))).length : 0;
+        return { current, ok: compare(current, r.operator, r.target) };
+      }
+      default: {
+        // rolling window special metric name
+        if ((r as any).metric === 'minutesInWindow' && (r as any).window?.rollingDays) {
+          const d = Math.max(1, Math.round((r as any).window.rollingDays));
+          const current = minutesInWindow(fpaths, d);
+          return { current, ok: compare(current, r.operator, r.target) };
+        }
+        return { current: 0, ok: false };
+      }
+    }
+  };
+  const compare = (a: number, op: RuleOperator, b: number) => {
+    switch (op) {
+      case '>=': return a >= b;
+      case '==': return a === b;
+      case '<=': return a <= b;
+      case '>': return a > b;
+      case '<': return a < b;
+    }
+  };
+  const nowIso = new Date().toISOString();
+  let changed = false;
+  for (const def of defs) {
+    const cur = st[def.id] || { id: def.id } as AchievementState;
+    if (cur.unlockedAt) continue; // already unlocked
+    const results = [] as Array<{ current: number; ok: boolean }>;
+    for (const r of (def.rules || [])) {
+      results.push(await evaluateRule(r));
+    }
+    const ok = results.every(r => r.ok);
+    const target = Math.max(...def.rules.map(r => r.target || 0), 0);
+    const current = Math.min(target, Math.min(...results.map(r => r.current)) || 0);
+    cur.progress = { current, target };
+    cur.lastEvaluatedAt = nowIso;
+    if (ok) {
+      cur.unlockedAt = nowIso;
+      if (def.notify !== false) broadcastAchievementUnlocked(def);
+    }
+    st[def.id] = cur;
+    changed = true;
+  }
+  if (changed) setAchievementState(st);
+}
 
 ipcMain.handle('history:setLastPosition', (_e, filePath: string, seconds: number) => {
   try {

@@ -71,6 +71,40 @@ type Api = {
     setAppSettings: (v: {
         enableHoverPreviews?: boolean;
     }) => Promise<boolean>;
+    getAchievements: () => Promise<Array<{
+        id: string;
+        name: string;
+        description?: string;
+        icon?: string;
+        rarity?: string;
+        rules: any[];
+        notify?: boolean;
+    }>>;
+    setAchievements: (defs: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        icon?: string;
+        rarity?: string;
+        rules: any[];
+        notify?: boolean;
+    }>) => Promise<boolean>;
+    getAchievementState: () => Promise<Record<string, {
+        id: string;
+        unlockedAt?: string;
+        progress?: {
+            current: number;
+            target: number;
+        };
+        lastEvaluatedAt?: string;
+    }>>;
+    resetAchievementState: (id?: string) => Promise<boolean>;
+    onAchievementUnlocked: (cb: (payload: {
+        id: string;
+        name: string;
+        icon?: string;
+        rarity?: string;
+    }) => void) => () => void;
 };
 declare global {
     interface Window {

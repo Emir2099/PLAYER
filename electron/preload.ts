@@ -34,6 +34,12 @@ type Api = {
   getDailyTotals: (days?: number) => Promise<{ dates: string[]; seconds: number[] }>;
   getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
   setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
+  // Achievements
+  getAchievements: () => Promise<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: string; rules: any[]; notify?: boolean }>>;
+  setAchievements: (defs: Array<{ id: string; name: string; description?: string; icon?: string; rarity?: string; rules: any[]; notify?: boolean }>) => Promise<boolean>;
+  getAchievementState: () => Promise<Record<string, { id: string; unlockedAt?: string; progress?: { current: number; target: number }; lastEvaluatedAt?: string }>>;
+  resetAchievementState: (id?: string) => Promise<boolean>;
+  onAchievementUnlocked: (cb: (payload: { id: string; name: string; icon?: string; rarity?: string }) => void) => () => void;
 };
 
 const api: Api = {
@@ -60,6 +66,16 @@ const api: Api = {
   getDailyTotals: (d?: number) => ipcRenderer.invoke('history:getDailyTotals', d),
   getAppSettings: () => ipcRenderer.invoke('store:getAppSettings'),
   setAppSettings: (v: { enableHoverPreviews?: boolean }) => ipcRenderer.invoke('store:setAppSettings', v),
+  // Achievements
+  getAchievements: () => ipcRenderer.invoke('ach:get'),
+  setAchievements: (defs) => ipcRenderer.invoke('ach:set', defs),
+  getAchievementState: () => ipcRenderer.invoke('ach:state:get'),
+  resetAchievementState: (id?: string) => ipcRenderer.invoke('ach:state:reset', id),
+  onAchievementUnlocked: (cb) => {
+    const listener = (_e: any, payload: any) => cb(payload);
+    ipcRenderer.on('ach:unlocked', listener);
+    return () => { try { ipcRenderer.removeListener('ach:unlocked', listener); } catch {} };
+  },
 };
 
 declare global {

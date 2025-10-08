@@ -69,7 +69,7 @@ const Library: React.FC = () => {
   const posSaveTickRef = useRef<number>(0);
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'GLOBAL' | 'LIBRARY' | 'INSIGHTS'>('GLOBAL');
+  const [activeTab, setActiveTab] = useState<'GLOBAL' | 'LIBRARY' | 'INSIGHTS' | 'ACHIEVEMENTS'>('GLOBAL');
   const [categoryItems, setCategoryItems] = useState<Array<{ type: 'video' | 'folder'; path: string }>>([]);
   const [categoryVideoMap, setCategoryVideoMap] = useState<Record<string, VideoItem>>({});
   const [categoryFolderMap, setCategoryFolderMap] = useState<Record<string, { path: string; name: string; mtime: number }>>({});
@@ -91,6 +91,152 @@ const Library: React.FC = () => {
   const [recentPages, setRecentPages] = useState(0);
   const [completedPage, setCompletedPage] = useState(0);
   const [completedPages, setCompletedPages] = useState(0);
+
+// --- Achievements minimal list ---
+const AchievementList: React.FC = () => {
+  const [defs, setDefs] = useState<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: string }>>([]);
+  const [state, setState] = useState<Record<string, { unlockedAt?: string; progress?: { current: number; target: number } }>>({});
+  useEffect(() => {
+    (async () => {
+  try { setDefs(await (window.api as any).getAchievements()); } catch {}
+  try { setState(await (window.api as any).getAchievementState()); } catch {}
+    })();
+  }, []);
+  return (
+    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
+      {defs.map(d => {
+        const s = state[d.id] || {};
+        const unlocked = !!s.unlockedAt;
+        const pct = s.progress && s.progress.target > 0 ? Math.min(100, Math.round(100 * (s.progress.current || 0) / s.progress.target)) : 0;
+        return (
+          <div key={d.id} className={`rounded-lg border ${unlocked ? 'border-emerald-600 bg-emerald-900/20' : 'border-slate-800 bg-steam-card'} p-3`}>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded bg-slate-700 flex items-center justify-center text-xl">{d.icon || '🏆'}</div>
+              <div>
+                <div className="text-slate-200 font-semibold">{d.name}</div>
+                <div className="text-slate-400 text-xs">{d.description || (unlocked ? 'Unlocked' : 'Locked')}</div>
+              </div>
+            </div>
+            {s.progress && (
+              <div className="mt-3">
+                <div className="h-1.5 bg-slate-700 rounded">
+                  <div className="h-1.5 bg-sky-500 rounded" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="text-slate-400 text-xs mt-1">{s.progress.current||0} / {s.progress.target||0}</div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {defs.length === 0 && (
+        <div className="text-slate-400 text-sm">No achievements yet. We’ll add a few defaults next.</div>
+      )}
+    </div>
+  );
+};
+
+const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) => {
+  const [name, setName] = useState('New Achievement');
+  const [description, setDescription] = useState('');
+  const [icon, setIcon] = useState('🏆');
+  const [rarity, setRarity] = useState<'common'|'rare'|'epic'|'legendary'>('common');
+  const [metric, setMetric] = useState<'minutes'|'uniqueVideos'|'videosCompleted'|'minutesInWindow'>('minutes');
+  const [operator, setOperator] = useState<'>='|'=='|'<='|'>'|'<'>('>=');
+  const [target, setTarget] = useState(60);
+  const [rollingDays, setRollingDays] = useState(7);
+  const [exts, setExts] = useState('');
+  const [cats, setCats] = useState('');
+
+  const save = async () => {
+    try {
+      const defs = await (window.api as any).getAchievements();
+      const id = (Math.random().toString(36).slice(2)) + Date.now();
+      const filters: any = {};
+      if (exts.trim()) filters.exts = exts.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (cats.trim()) filters.categories = cats.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const rule: any = { metric, operator, target, filters };
+      if (metric === 'minutesInWindow') rule.window = { rollingDays };
+      const def = { id, name, description, icon, rarity, rules: [rule], notify: true };
+      await (window.api as any).setAchievements([...(defs||[]), def]);
+      onClose();
+    } catch {}
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-700 p-3">
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Name</div>
+          <input className="w-full bg-slate-800 rounded px-2 py-1" value={name} onChange={e=>setName(e.target.value)} />
+        </div>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Icon</div>
+          <input className="w-full bg-slate-800 rounded px-2 py-1" value={icon} onChange={e=>setIcon(e.target.value)} />
+        </div>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Rarity</div>
+          <select className="w-full bg-slate-800 rounded px-2 py-1" value={rarity} onChange={e=>setRarity(e.target.value as any)}>
+            <option value="common">common</option>
+            <option value="rare">rare</option>
+            <option value="epic">epic</option>
+            <option value="legendary">legendary</option>
+          </select>
+        </div>
+        <div className="col-span-full">
+          <div className="text-xs text-slate-400 mb-1">Description</div>
+          <input className="w-full bg-slate-800 rounded px-2 py-1" value={description} onChange={e=>setDescription(e.target.value)} />
+        </div>
+      </div>
+      <div className="mt-4 text-slate-200 font-semibold">Rule</div>
+      <div className="grid gap-3 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Metric</div>
+          <select className="w-full bg-slate-800 rounded px-2 py-1" value={metric} onChange={e=>setMetric(e.target.value as any)}>
+            <option value="minutes">minutes (total)</option>
+            <option value="uniqueVideos">unique videos</option>
+            <option value="videosCompleted">videos completed</option>
+            <option value="minutesInWindow">minutes in window</option>
+          </select>
+        </div>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Operator</div>
+          <select className="w-full bg-slate-800 rounded px-2 py-1" value={operator} onChange={e=>setOperator(e.target.value as any)}>
+            <option value=">=">&gt;=</option>
+            <option value="==">==</option>
+            <option value="<=">&lt;=</option>
+            <option value=">">&gt;</option>
+            <option value="<">&lt;</option>
+          </select>
+        </div>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Target</div>
+          <input type="number" className="w-full bg-slate-800 rounded px-2 py-1" value={target} onChange={e=>setTarget(parseInt(e.target.value||'0',10))} />
+        </div>
+        {metric==='minutesInWindow' && (
+          <div>
+            <div className="text-xs text-slate-400 mb-1">Rolling days</div>
+            <input type="number" className="w-full bg-slate-800 rounded px-2 py-1" value={rollingDays} onChange={e=>setRollingDays(parseInt(e.target.value||'7',10))} />
+          </div>
+        )}
+      </div>
+      <div className="mt-4 text-slate-200 font-semibold">Filters (optional)</div>
+      <div className="grid gap-3 mt-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Extensions (comma-separated)</div>
+          <input className="w-full bg-slate-800 rounded px-2 py-1" placeholder="mp4,mkv" value={exts} onChange={e=>setExts(e.target.value)} />
+        </div>
+        <div>
+          <div className="text-xs text-slate-400 mb-1">Categories (ids or names, comma-separated)</div>
+          <input className="w-full bg-slate-800 rounded px-2 py-1" value={cats} onChange={e=>setCats(e.target.value)} />
+        </div>
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button onClick={save} className="px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-sm">Save</button>
+        <button onClick={onClose} className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
+      </div>
+    </div>
+  );
+};
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -245,6 +391,17 @@ const Library: React.FC = () => {
   const [insights, setInsights] = useState<InsightData | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [dailyTotals, setDailyTotals] = useState<{ dates: string[]; minutes: number[] }>({ dates: [], minutes: [] });
+  const [showEditor, setShowEditor] = useState(false);
+
+  // Listen for achievement unlocks and show a small toast (Steam-like bottom-right)
+  useEffect(() => {
+    const off = (window.api as any).onAchievementUnlocked?.((payload: { name: string; icon?: string; rarity?: string }) => {
+      const icon = payload.icon || '🏆';
+      const rareType = payload.rarity === 'legendary' ? 'warning' : 'success';
+      try { show(`${icon} Achievement Unlocked — ${payload.name}`, { type: rareType as any }); } catch {}
+    });
+    return () => { try { off?.(); } catch {} };
+  }, []);
 
   const buildInsights = async () => {
     try {
@@ -592,6 +749,10 @@ const Library: React.FC = () => {
               className={`px-1 py-1 tracking-wide ${activeTab==='INSIGHTS' ? 'text-sky-300 border-b-2 border-sky-400' : 'text-slate-300 hover:text-slate-100'}`}
               onClick={()=> setActiveTab('INSIGHTS')}
             >INSIGHTS</button>
+            <button
+              className={`px-1 py-1 tracking-wide ${activeTab==='ACHIEVEMENTS' ? 'text-sky-300 border-b-2 border-sky-400' : 'text-slate-300 hover:text-slate-100'}`}
+              onClick={()=> setActiveTab('ACHIEVEMENTS')}
+            >ACHIEVEMENTS</button>
           </div>
         </div>
 
@@ -1024,6 +1185,20 @@ const Library: React.FC = () => {
               })
             )}
           </>
+            ) : activeTab==='ACHIEVEMENTS' ? (
+              <div className="px-8 pb-12 w-full max-w-7xl mx-auto">
+                <div className="rounded-xl p-5 bg-steam-panel border border-slate-800">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-slate-200 font-semibold">Achievements</div>
+                    <button onClick={()=> setShowEditor(true)} className="px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-white text-sm">Create</button>
+                  </div>
+                  {showEditor ? (
+                    <InlineAchievementEditor onClose={()=> setShowEditor(false)} />
+                  ) : (
+                    <AchievementList />
+                  )}
+                </div>
+              </div>
             ) : (
               <>
         {folders.map(f => {

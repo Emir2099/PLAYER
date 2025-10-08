@@ -24,6 +24,16 @@ const api = {
   getDailyTotals: (d) => ipcRenderer.invoke('history:getDailyTotals', d),
   getAppSettings: () => ipcRenderer.invoke('store:getAppSettings'),
   setAppSettings: (v) => ipcRenderer.invoke('store:setAppSettings', v),
+  // Achievements
+  getAchievements: () => ipcRenderer.invoke('ach:get'),
+  setAchievements: (defs) => ipcRenderer.invoke('ach:set', defs),
+  getAchievementState: () => ipcRenderer.invoke('ach:state:get'),
+  resetAchievementState: (id) => ipcRenderer.invoke('ach:state:reset', id),
+  onAchievementUnlocked: (cb) => {
+    const handler = (_e, payload) => cb?.(payload);
+    ipcRenderer.on('ach:unlocked', handler);
+    return () => ipcRenderer.off('ach:unlocked', handler);
+  },
   // Categories
   getCategories: () => ipcRenderer.invoke('cats:get'),
   createCategory: (name) => ipcRenderer.invoke('cats:create', name),
