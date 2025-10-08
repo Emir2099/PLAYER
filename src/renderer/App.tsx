@@ -499,11 +499,13 @@ const Library: React.FC = () => {
           </div>
         </div>
 
-  {/* Breadcrumbs */}
-  <div className="px-6 pt-2 flex items-center gap-2"></div>
-        <div className="px-8 py-3">
-          <div className="text-sm text-slate-300/90 overflow-x-auto whitespace-nowrap scrollbar-thin pr-2">
-            {(() => {
+  {/* Breadcrumbs (hidden on INSIGHTS) */}
+  {activeTab !== 'INSIGHTS' && (
+    <>
+      <div className="px-6 pt-2 flex items-center gap-2"></div>
+      <div className="px-8 py-3">
+        <div className="text-sm text-slate-300/90 overflow-x-auto whitespace-nowrap scrollbar-thin pr-2">
+          {(() => {
               const segs: Array<{ label: string; path: string }> = [];
               if (/^[A-Za-z]:\\/.test(folder)) {
                 const drive = folder.slice(0, 3);
@@ -532,9 +534,11 @@ const Library: React.FC = () => {
                   ))}
                 </>
               );
-            })()}
-          </div>
+          })()}
         </div>
+      </div>
+    </>
+  )}
 
         {/* Search and sort toolbar (lower layout, under breadcrumbs) - visible in LIBRARY */}
         {activeTab==='LIBRARY' && (
@@ -1001,8 +1005,8 @@ const Library: React.FC = () => {
           offset={12}
         />
 
-      {/* Recently Watched */}
-      {Object.keys(history).length > 0 && (
+      {/* Recently Watched (hidden on INSIGHTS) */}
+      {activeTab !== 'INSIGHTS' && Object.keys(history).length > 0 && (
         <div className="px-6 pb-6">
           <div className="text-slate-300 mb-2">Continue watching</div>
           <div className="flex gap-3 overflow-x-auto scrollbar-thin pr-2">
