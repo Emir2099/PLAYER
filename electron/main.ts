@@ -36,6 +36,7 @@ type Settings = {
   ffmpegPath?: string;
   ffprobePath?: string;
   enableHoverPreviews?: boolean;
+  folderCovers?: Record<string, string>; // folder path -> file:/// url
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
@@ -129,6 +130,12 @@ export type VideoItem = {
   thumb?: string | null; // file:// path to thumbnail if generated
 };
 
+export type FolderItem = {
+  path: string;
+  name: string;
+  mtime: number;
+};
+
 const VIDEO_EXTS = new Set([
   'mp4','mkv','avi','mov','wmv','webm','flv','m4v','ts','mts','m2ts'
 ]);
@@ -175,6 +182,29 @@ async function scanDirectory(dir: string, opts: ScanOptions = {}): Promise<Video
 function getThumbDir() {
   const dir = path.join(app.getPath('userData'), 'thumbnails');
   return dir;
+}
+
+function getFolderCoversDir() {
+  const dir = path.join(app.getPath('userData'), 'folder-covers');
+  return dir;
+}
+
+async function listFolders(dir: string): Promise<FolderItem[]> {
+  const out: FolderItem[] = [];
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const fullPath = path.join(dir, entry.name);
+      try {
+        const stat = await fs.stat(fullPath);
+        out.push({ path: fullPath, name: entry.name, mtime: stat.mtimeMs });
+      } catch {}
+    }
+  } catch {}
+  // Sort recent first
+  out.sort((a, b) => b.mtime - a.mtime);
+  return out;
 }
 
 async function ensureDir(p: string) {
@@ -320,6 +350,11 @@ ipcMain.handle('fs:scanVideos', async (_e, dir: string, opts?: ScanOptions) => {
   return await scanDirectory(dir, opts);
 });
 
+ipcMain.handle('fs:listFolders', async (_e, dir: string) => {
+  if (!dir || !existsSync(dir)) return [];
+  return await listFolders(dir);
+});
+
 ipcMain.handle('os:home', () => os.homedir());
 
 ipcMain.handle('revealInExplorer', async (_e, filePath: string) => {
@@ -353,6 +388,30 @@ ipcMain.handle('store:setFFPaths', async (_e, val: { ffmpegPath?: string; ffprob
 
 ipcMain.handle('video:getMeta', async (_e, filePath: string) => {
   return await getVideoMeta(filePath);
+});
+
+ipcMain.handle('folder:getCovers', () => {
+  try { return (store.get('folderCovers') as Record<string, string>) || {}; } catch { return {}; }
+});
+
+ipcMain.handle('folder:setCover', async (_e, folderPath: string, sourceImagePath: string) => {
+  try {
+    // Copy the selected image into app data with a stable hash-based name
+    const coversDir = getFolderCoversDir();
+    await ensureDir(coversDir);
+    const ext = path.extname(sourceImagePath) || '.jpg';
+    const name = hashPath(folderPath) + ext.toLowerCase();
+    const dest = path.join(coversDir, name);
+    try { await fs.copyFile(sourceImagePath, dest); } catch {}
+    const url = 'file:///' + dest.replace(/\\/g, '/');
+    const encoded = encodeURI(url);
+    const map = (store.get('folderCovers') as Record<string, string>) || {};
+    map[folderPath] = encoded;
+    store.set('folderCovers', map);
+    return { ok: true, url: encoded };
+  } catch (e) {
+    return { ok: false, error: String((e as any)?.message || e) };
+  }
 });
 
 ipcMain.handle('store:getLastFolder', () => {

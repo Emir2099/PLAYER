@@ -15,6 +15,9 @@ declare interface Window {
     homeDir: () => Promise<string>;
     revealInExplorer: (filePath: string) => Promise<boolean>;
     getMeta: (filePath: string) => Promise<{ duration?: number; thumb?: string | null }>;
+  listFolders: (dir: string) => Promise<Array<{ path: string; name: string; mtime: number }>>;
+  getFolderCovers: () => Promise<Record<string, string>>;
+  setFolderCover: (folderPath: string, imagePath: string) => Promise<{ ok: boolean; url?: string; error?: string }>;
     getLastFolder: () => Promise<string | undefined>;
     setLastFolder: (dir: string) => Promise<boolean>;
     getHistory: () => Promise<Record<string, number>>;

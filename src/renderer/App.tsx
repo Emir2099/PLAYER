@@ -3,6 +3,7 @@ import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog 
 import SettingsModal from './components/SettingsModal';
 import { ToastProvider, useToast } from './components/Toast';
 import GameCard from './components/GameCard';
+import FolderCard from './components/FolderCard';
 import HoverOverlay from './components/HoverOverlay';
 
 // Types mirrored from preload
@@ -43,6 +44,8 @@ function formatDuration(sec?: number) {
 const Library: React.FC = () => {
   const [folder, setFolder] = useState<string>('');
   const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [folders, setFolders] = useState<Array<{ path: string; name: string; mtime: number }>>([]);
+  const [folderCovers, setFolderCovers] = useState<Record<string, string>>({});
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('recent');
   const [selected, setSelected] = useState<VideoItem | null>(null);
@@ -66,9 +69,11 @@ const Library: React.FC = () => {
       const base = last && last.length ? last : await window.api.homeDir();
       setFolder(base);
       setHistory(await window.api.getHistory());
+      try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
       try { setAppSettings(await window.api.getAppSettings()); } catch {}
       const items = await window.api.scanVideos(base, { recursive: true, depth: 3 });
       setVideos(items);
+      try { setFolders(await window.api.listFolders(base)); } catch {}
       refreshMeta(items);
     })();
   }, []);
@@ -96,6 +101,8 @@ const Library: React.FC = () => {
       await window.api.setLastFolder(sel);
       const items = await window.api.scanVideos(sel, { recursive: true, depth: 3 });
       setVideos(items);
+      try { setFolders(await window.api.listFolders(sel)); } catch {}
+      try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
       refreshMeta(items);
     }
   };
@@ -198,8 +205,34 @@ const Library: React.FC = () => {
           </div>
         </div>
 
-        {/* Grid */}
+        {/* Grid: Folders (no hover overlay) then videos */}
         <div ref={gridRef} className="px-8 pb-12 grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
+        {folders.map(f => (
+          <div key={`folder-${f.path}`}>
+            <FolderCard
+              title={f.name}
+              cover={folderCovers[f.path]}
+              meta={new Date(f.mtime).toLocaleDateString()}
+              onOpen={async () => {
+                setFolder(f.path);
+                await window.api.setLastFolder(f.path);
+                const items = await window.api.scanVideos(f.path, { recursive: true, depth: 3 });
+                setVideos(items);
+                try { setFolders(await window.api.listFolders(f.path)); } catch {}
+                refreshMeta(items);
+              }}
+              onContextMenu={async (e) => {
+                e.preventDefault();
+                const img = await window.api.selectFile([
+                  { name: 'Images', extensions: ['jpg','jpeg','png','webp'] },
+                ]);
+                if (!img) return;
+                const res = await window.api.setFolderCover(f.path, img);
+                if (res?.ok && res.url) setFolderCovers(prev => ({ ...prev, [f.path]: res.url! }));
+              }}
+            />
+          </div>
+        ))}
         {filtered.map(v => (
           <div
             key={v.path}
