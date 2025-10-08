@@ -15,6 +15,9 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const editInputRef = useRef<HTMLInputElement | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>('');
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null);
 
   const refresh = async () => {
@@ -38,6 +41,24 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
       } catch {}
       setActive(res.category.id);
       onSelect?.(res.category.id);
+    }
+  };
+
+  const startRename = (id: string, name: string) => {
+    setEditingId(id);
+    setEditingName(name);
+    setTimeout(()=> editInputRef.current?.focus(), 0);
+  };
+
+  const commitRename = async () => {
+    if (!editingId) return;
+    const newLabel = (editingName || '').trim();
+    const target = cats.find(c=>c.id===editingId);
+    setEditingId(null);
+    if (!target) return;
+    if (newLabel && newLabel !== target.name) {
+      await window.api.renameCategory(target.id, newLabel);
+      await refresh();
     }
   };
 
@@ -95,7 +116,19 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
                onDrop={(e)=>onDropTo(c.id, e)}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate" title={c.name}>{c.name}</span>
+              {editingId===c.id ? (
+                <input
+                  ref={editInputRef}
+                  className="min-w-0 flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-sm"
+                  value={editingName}
+                  onChange={e=>setEditingName((e.target as HTMLInputElement).value)}
+                  onMouseDown={e=>e.stopPropagation()}
+                  onKeyDown={e=>{ if (e.key==='Enter') { e.preventDefault(); commitRename(); } if (e.key==='Escape') { e.preventDefault(); setEditingId(null); } }}
+                  onBlur={commitRename}
+                />
+              ) : (
+                <span className="truncate" title={c.name}>{c.name}</span>
+              )}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400">{c.items.length}</span>
                 <button
@@ -117,8 +150,8 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
           y={menu.y}
           onClose={()=>setMenu(null)}
           items={[
-            { label: 'Rename', onClick: async () => { const newLabel = prompt('Rename category', menu.name) || menu.name; if (newLabel && newLabel !== menu.name) { await window.api.renameCategory(menu.id, newLabel); await refresh(); } } },
-            { label: 'Delete', onClick: async () => { if (confirm(`Delete category "${menu.name}"?`)) { await window.api.deleteCategory(menu.id); if (active===menu.id) { setActive(null); onSelect?.(null); } await refresh(); } } },
+            { label: 'Rename', onClick: () => { setMenu(null); startRename(menu.id, menu.name); } },
+            { label: 'Delete', onClick: async () => { const ok = confirm(`Delete category "${menu.name}"?`); setMenu(null); if (ok) { await window.api.deleteCategory(menu.id); if (active===menu.id) { setActive(null); onSelect?.(null); } await refresh(); } } },
           ]}
         />
       )}

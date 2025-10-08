@@ -23,9 +23,9 @@ const ContextMenu: React.FC<Props> = ({ x, y, items, onClose }) => {
   }, [onClose]);
 
   return (
-    <div style={{ position: 'absolute', left: x, top: y, zIndex: 2000 }} className="min-w-[180px] rounded-md overflow-hidden border border-black/60 bg-[#2b333e] text-slate-100 shadow-xl">
+    <div style={{ position: 'fixed', left: x, top: y, zIndex: 2000 }} className="min-w-[180px] rounded-md overflow-hidden border border-black/60 bg-[#2b333e] text-slate-100 shadow-xl">
       {items.map((it, idx) => (
-        <button key={idx} disabled={it.disabled} onClick={it.onClick} className={`w-full text-left px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed`}>
+        <button key={idx} disabled={it.disabled} onClick={(e)=>{ e.stopPropagation(); it.onClick(); }} className={`w-full text-left px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed`}>
           {it.label}
         </button>
       ))}
