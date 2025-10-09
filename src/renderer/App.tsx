@@ -570,6 +570,9 @@ function BadgeGrid() {
   const videoWrapRef = useRef<HTMLDivElement | null>(null);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   const [playerFullscreen, setPlayerFullscreen] = useState(false);
+  const [videoControlsVisible, setVideoControlsVisible] = useState(true);
+  const [videoPaused, setVideoPaused] = useState(false);
+  const controlsTimerRef = useRef<number | null>(null);
   useEffect(() => {
     const onFs = () => {
       const isFs = !!(document.fullscreenElement && videoWrapRef.current && document.fullscreenElement === videoWrapRef.current);
@@ -583,7 +586,23 @@ function BadgeGrid() {
     const el = videoElRef.current;
     if (!el) return;
     try { (el as any).setAttribute('controlsList', 'nofullscreen'); } catch {}
+    // Reset controls visibility for a new selection
+    try { el.controls = true; setVideoControlsVisible(true); } catch {}
   }, [selected]);
+
+  const updateControlsVisibility = (visible: boolean) => {
+    setVideoControlsVisible(visible);
+    const el = videoElRef.current; if (!el) return;
+    try { el.controls = visible; } catch {}
+  };
+
+  const clearControlsTimer = () => { if (controlsTimerRef.current) { window.clearTimeout(controlsTimerRef.current); controlsTimerRef.current = null; } };
+
+  const scheduleHideControls = (delay = 1800) => {
+    if (videoPaused) return; // keep visible when paused
+    clearControlsTimer();
+    controlsTimerRef.current = window.setTimeout(() => { updateControlsVisibility(false); }, delay);
+  };
 
   const handleDeleteAchievement = async (id: string) => {
     try {
@@ -851,6 +870,8 @@ function BadgeGrid() {
         .player-fs-root:fullscreen .player-video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none !important; max-height: none !important; object-fit: contain; background: #000; }
         .player-fs-root.player-fs-active { position: fixed; inset: 0; width: 100vw; height: 100vh; background: #000; overflow: hidden; }
         .player-fs-root.player-fs-active .player-video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none !important; max-height: none !important; object-fit: contain; background: #000; }
+        /* Hide cursor in fullscreen when controls are hidden */
+        .player-fs-root.player-fs-active.hide-cursor { cursor: none; }
       `}</style>
       {/* Custom Title Bar */}
       <div className="titlebar fixed top-0 left-0 right-0 h-8 z-50 bg-gradient-to-r from-[#0e141c] via-[#111827] to-[#0e141c] border-b border-slate-800/80">
@@ -1715,7 +1736,12 @@ function BadgeGrid() {
               </div>
             </div>
             <div className="bg-black">
-              <div ref={videoWrapRef} className={`relative player-fs-root ${playerFullscreen ? 'player-fs-active' : ''}`}>
+              <div
+                ref={videoWrapRef}
+                className={`relative player-fs-root ${playerFullscreen ? 'player-fs-active' : ''} ${playerFullscreen && !videoControlsVisible ? 'hide-cursor' : ''}`}
+                onMouseMove={() => { updateControlsVisibility(true); scheduleHideControls(1600); }}
+                onMouseLeave={() => { if (!videoPaused) updateControlsVisibility(false); }}
+              >
               <video
                 ref={videoElRef}
                 src={fileUrl(selected.path)}
@@ -1736,6 +1762,9 @@ function BadgeGrid() {
                 onPlay={() => {
                   window.api.markWatched(selected.path);
                   watchTimerRef.current = { path: selected.path, lastTick: Date.now() };
+                  setVideoPaused(false);
+                  updateControlsVisibility(true);
+                  scheduleHideControls(1600);
                 }}
                 onTimeUpdate={(e) => {
                   try {
@@ -1788,6 +1817,8 @@ function BadgeGrid() {
                     if (Number.isFinite(v.currentTime)) window.api.setLastPosition(t.path, v.currentTime).catch(()=>{});
                   } catch {}
                   watchTimerRef.current = null;
+                  setVideoPaused(true);
+                  updateControlsVisibility(true);
                   if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
@@ -1803,6 +1834,8 @@ function BadgeGrid() {
                   if (sec > 0) window.api.addWatchTime(t.path, sec).catch(()=>{});
                   try { window.api.setLastPosition(t.path, 0).catch(()=>{}); } catch {}
                   watchTimerRef.current = null;
+                  setVideoPaused(true);
+                  updateControlsVisibility(true);
                   if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
