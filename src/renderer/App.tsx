@@ -319,8 +319,11 @@ const AchievementList: React.FC<{
     if (mode === 'remaining') return !unlocked;
     return true; // all
   });
+  // Dynamic grid layout: completed uses 2 columns (room for badge panel), remaining & manage use up to 3
+  const gridBase = 'grid gap-6 mx-auto w-full';
+  const gridCols = mode==='completed' ? 'grid-cols-1 md:grid-cols-2 max-w-5xl' : (mode==='remaining' || manage) ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 max-w-7xl' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-6xl';
   return (
-    <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+    <div className={`${gridBase} ${gridCols}`}>
       {filteredDefs.length === 0 && (
         <div className="text-slate-400 text-sm">
           {mode==='completed' ? 'No achievements completed yet.' : mode==='remaining' ? 'Nothing left – all achievements unlocked!' : 'No achievements yet. Use Create to add one.'}
