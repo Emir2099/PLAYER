@@ -23,6 +23,9 @@ export type VideoItem = {
 
 type SortKey = 'recent' | 'name' | 'size';
 
+// Completion logic constants
+const NEAR_END_MIN_DURATION_SEC = 120; // only treat "<=10s remaining" as complete for videos >= 2 minutes
+
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -300,6 +303,27 @@ const Library: React.FC = () => {
   const posSaveTickRef = useRef<number>(0);
   // Tracks fully completed videos (>=95% watched OR <=10s remaining)
   const [completedMap, setCompletedMap] = useState<Record<string, boolean>>({});
+  // Cache the highest known lastPositionSec per path to avoid regressions when rewatching
+  const lastPosRef = useRef<Record<string, number>>({});
+
+  // Helper: only increase last position; never decrease
+  const setLastPositionMax = async (path: string, pos: number | undefined) => {
+    try {
+      if (!Number.isFinite(pos as number)) return;
+      const p = path;
+      const incoming = Math.max(0, Math.floor(pos as number));
+      const cached = lastPosRef.current[p];
+      if (typeof cached === 'number' && incoming <= cached) return; // nothing to do
+      // If we don't have a cache, peek current to avoid lowering
+      let base = cached;
+      if (base === undefined) {
+        try { const s = await window.api.getWatchStats(p); if (typeof s?.lastPositionSec === 'number') base = s.lastPositionSec; } catch {}
+      }
+      const next = Math.max(0, typeof base === 'number' ? Math.max(base, incoming) : incoming);
+      await window.api.setLastPosition(p, next).catch(()=>{});
+      lastPosRef.current[p] = next;
+    } catch {}
+  };
 
   const recomputeCompletion = async (path: string, durationHint?: number, statsHint?: { totalMinutes?: number; lastPositionSec?: number }) => {
     try {
@@ -312,8 +336,19 @@ const Library: React.FC = () => {
       const lastPos = stats.lastPositionSec;
       const remaining = (typeof lastPos === 'number') ? Math.max(0, durSec - lastPos) : undefined;
       const ratio = durSec > 0 ? (totSec / durSec) : 0;
-      const completed = durSec > 0 && (ratio >= 0.95 || (remaining !== undefined && remaining <= 10));
-      setCompletedMap(prev => (prev[path] === completed ? prev : { ...prev, [path]: completed }));
+      // Only allow the "<=10s remaining" shortcut for longer videos to avoid false positives on short clips
+      const allowNearEnd = durSec >= NEAR_END_MIN_DURATION_SEC;
+      const nearEnd = allowNearEnd && (remaining !== undefined && remaining <= 10);
+      const completed = durSec > 0 && (ratio >= 0.95 || nearEnd);
+      setCompletedMap(prev => {
+        const sticky = prev[path] ? true : completed; // once true, stay true
+        return (prev[path] === sticky) ? prev : { ...prev, [path]: sticky };
+      });
+      // Keep local last-position cache updated with the max we've seen
+      if (typeof lastPos === 'number') {
+        const cur = lastPosRef.current[path];
+        if (cur === undefined || lastPos > cur) lastPosRef.current[path] = lastPos;
+      }
     } catch {}
   };
 
@@ -625,6 +660,39 @@ function BadgeGrid() {
     clearControlsTimer();
     controlsTimerRef.current = window.setTimeout(() => { updateControlsVisibility(false); }, delay);
   };
+  const refreshHistory = async () => {
+    try { const h = await window.api.getHistory(); setHistory(h || {}); } catch {}
+  };
+
+  const flushPlaybackProgress = async (reason: 'pause'|'ended'|'close'|'unmount') => {
+    try {
+      const t = watchTimerRef.current;
+      if (!t) return;
+      // Flush any accumulated batch
+      if (watchAccumRef.current && watchAccumRef.current.path === t.path) {
+        const extra = Math.floor(watchAccumRef.current.accumulated);
+        if (extra > 0) { await window.api.addWatchTime(t.path, extra).catch(()=>{}); setInsightsDirty(true); }
+        watchAccumRef.current = null;
+      }
+      // Add time since last tick
+      const sec = Math.round((Date.now() - t.lastTick) / 1000);
+      if (sec > 0) { await window.api.addWatchTime(t.path, sec).catch(()=>{}); setInsightsDirty(true); }
+      // Save last known position (or duration if ended)
+      const v = videoElRef.current;
+      if (v) {
+        if (reason === 'ended' && Number.isFinite(v.duration)) {
+          await window.api.setLastPosition(t.path, v.duration).catch(()=>{});
+        } else if (Number.isFinite(v.currentTime)) {
+          await window.api.setLastPosition(t.path, v.currentTime).catch(()=>{});
+        }
+      }
+      watchTimerRef.current = null;
+      setVideoPaused(true);
+      updateControlsVisibility(true);
+      try { recomputeCompletion(t.path, v && Number.isFinite(v.duration) ? v.duration : undefined, { totalMinutes: undefined, lastPositionSec: v && Number.isFinite(v.currentTime) ? v.currentTime : undefined }).catch(()=>{}); } catch {}
+      refreshHistory();
+    } catch {}
+  };
 
   const handleDeleteAchievement = async (id: string) => {
     try {
@@ -723,7 +791,7 @@ function BadgeGrid() {
         }
       }
 
-      // completed videos (>=95% watched or near end: remaining <= 10s)
+      // completed videos (>=95% watched or near end: remaining <= 10s, only for long videos)
       const completedList: InsightData["completed"] = [];
       for (const p of allPaths) {
         const durSec = pathMeta[p]?.duration || 0;
@@ -731,9 +799,12 @@ function BadgeGrid() {
         const totSec = totMin * 60;
         const lastPos = statsMap[p]?.lastPos;
         const remaining = (durSec > 0 && typeof lastPos === 'number') ? Math.max(0, durSec - lastPos) : undefined;
-        const nearEnd = (remaining !== undefined) ? (remaining <= 10) : false;
-        const ratio = durSec > 0 ? (totSec / durSec) : 0;
-        const isCompleted = durSec > 0 && (ratio >= 0.95 || nearEnd);
+        const allowNearEnd = durSec >= NEAR_END_MIN_DURATION_SEC;
+        const nearEnd = allowNearEnd && (remaining !== undefined ? (remaining <= 10) : false);
+  const ratio = durSec > 0 ? (totSec / durSec) : 0;
+  // Also consider session-sticky completedMap to avoid removals when rewatching
+  const stickyCompleted = !!completedMap[p];
+  const isCompleted = stickyCompleted || (durSec > 0 && (ratio >= 0.95 || nearEnd));
         if (isCompleted) {
           completedList.push({ path: p, name: p.split('\\').pop() || p, thumb: pathMeta[p]?.thumb });
         }
@@ -1777,7 +1848,7 @@ function BadgeGrid() {
                   }}
                   className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700"
                 >{playerFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</button>
-                <button onClick={() => setSelected(null)} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">Close</button>
+                <button onClick={async () => { await flushPlaybackProgress('close'); setSelected(null); }} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">Close</button>
               </div>
             </div>
             <div className="bg-black">
@@ -1810,16 +1881,21 @@ function BadgeGrid() {
                   setVideoPaused(false);
                   updateControlsVisibility(true);
                   scheduleHideControls(1600);
+                  refreshHistory();
                 }}
                 onTimeUpdate={(e) => {
                   try {
                     const v = e.currentTarget as HTMLVideoElement;
                     if (!v || !Number.isFinite(v.currentTime)) return;
                     const now = Date.now();
-                    // Save playback position every 5s
+                    // Save playback position every 5s (monotonic)
                     if (now - posSaveTickRef.current > 5000) {
                       if (watchTimerRef.current?.path) {
-                        window.api.setLastPosition(watchTimerRef.current.path, v.currentTime).catch(()=>{});
+                        setLastPositionMax(watchTimerRef.current.path, v.currentTime).catch(()=>{});
+                        if (Number.isFinite(v.currentTime)) {
+                          const cur = lastPosRef.current[watchTimerRef.current.path];
+                          if (cur === undefined || v.currentTime > cur) lastPosRef.current[watchTimerRef.current.path] = v.currentTime;
+                        }
                       }
                       posSaveTickRef.current = now;
                     }
@@ -1843,65 +1919,25 @@ function BadgeGrid() {
                           if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                             window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                           }
+                          // intentionally skip refreshHistory() here to avoid chattiness
                         }
                       }
                     }
                   } catch {}
                 }}
-                onPause={(e) => {
-                  const t = watchTimerRef.current; if (!t) return;
-                  // Flush partial accumulated batch first
-                  if (watchAccumRef.current && watchAccumRef.current.path === t.path) {
-                    const extra = Math.floor(watchAccumRef.current.accumulated);
-                    if (extra > 0) window.api.addWatchTime(t.path, extra).catch(()=>{});
-                    watchAccumRef.current = null;
-                  }
-                  const sec = Math.round((Date.now() - t.lastTick) / 1000);
-                  if (sec > 0) { window.api.addWatchTime(t.path, sec).catch(()=>{}); setInsightsDirty(true); }
-                  try {
-                    const v = e.currentTarget as HTMLVideoElement;
-                    if (Number.isFinite(v.currentTime)) window.api.setLastPosition(t.path, v.currentTime).catch(()=>{});
-                  } catch {}
-                  watchTimerRef.current = null;
-                  setVideoPaused(true);
-                  updateControlsVisibility(true);
-                  try {
-                    const v = e.currentTarget as HTMLVideoElement;
-                    recomputeCompletion(t.path, Number.isFinite(v.duration) ? v.duration : undefined, { totalMinutes: undefined, lastPositionSec: Number.isFinite(v.currentTime) ? v.currentTime : undefined }).catch(()=>{});
-                  } catch {}
+                onPause={() => {
+                  flushPlaybackProgress('pause');
                   if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
+                  refreshHistory();
                 }}
                 onEnded={() => {
-                  const t = watchTimerRef.current; if (!t) return;
-                  if (watchAccumRef.current && watchAccumRef.current.path === t.path) {
-                    const extra = Math.floor(watchAccumRef.current.accumulated);
-                    if (extra > 0) window.api.addWatchTime(t.path, extra).catch(()=>{});
-                    watchAccumRef.current = null;
-                  }
-                  const sec = Math.round((Date.now() - t.lastTick) / 1000);
-                  if (sec > 0) { window.api.addWatchTime(t.path, sec).catch(()=>{}); setInsightsDirty(true); }
-                  try {
-                    // mark last position at duration to indicate completion
-                    const v = videoElRef.current;
-                    const dur = v && Number.isFinite(v.duration) ? v.duration : undefined;
-                    if (typeof dur === 'number') {
-                      window.api.setLastPosition(t.path, dur).catch(()=>{});
-                    } else {
-                      window.api.setLastPosition(t.path, 0).catch(()=>{});
-                    }
-                  } catch {}
-                  watchTimerRef.current = null;
-                  setVideoPaused(true);
-                  updateControlsVisibility(true);
-                  try {
-                    const v = videoElRef.current;
-                    recomputeCompletion(t.path, v && Number.isFinite(v.duration) ? v.duration : undefined, { totalMinutes: undefined, lastPositionSec: v && Number.isFinite(v.duration) ? v.duration : undefined }).catch(()=>{});
-                  } catch {}
+                  flushPlaybackProgress('ended');
                   if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
+                  refreshHistory();
                 }}
               />
               </div>
