@@ -19,6 +19,7 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null);
+  const editingActive = editingId !== null || creating;
 
   const refresh = async () => {
     try {
@@ -29,6 +30,18 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
   };
 
   useEffect(() => { refresh(); }, []);
+
+  // Prevent global click handlers from stealing focus while editing/creating
+  useEffect(() => {
+    if (!editingActive) return;
+    const stop = (e: Event) => { e.stopPropagation(); };
+    document.addEventListener('mousedown', stop, true);
+    document.addEventListener('keydown', stop, true);
+    return () => {
+      document.removeEventListener('mousedown', stop, true);
+      document.removeEventListener('keydown', stop, true);
+    };
+  }, [editingActive]);
 
   const create = async () => {
     const name = newName.trim() || 'New Category';
@@ -95,13 +108,14 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
       </div>
       {creating && (
         <div className="flex gap-2" draggable={false} onMouseDown={e=>e.stopPropagation()}>
-          <input ref={inputRef} autoFocus draggable={false}
+     <input ref={inputRef} autoFocus draggable={false}
                  className="no-drag flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700"
                  placeholder="Category name"
                  value={newName}
-                 onChange={e=>setNewName((e.target as HTMLInputElement).value)}
-                 onMouseDown={(e)=>e.stopPropagation()}
-                 onKeyDown={(e)=>e.stopPropagation()}
+       onChange={e=>setNewName((e.target as HTMLInputElement).value)}
+       onMouseDown={(e)=>e.stopPropagation()}
+       onKeyDown={(e)=>{ e.stopPropagation(); }}
+       onDragStart={(e)=> e.stopPropagation()}
           />
           <button className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={create}>Add</button>
         </div>
@@ -119,12 +133,14 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
               {editingId===c.id ? (
                 <input
                   ref={editInputRef}
+                  autoFocus
                   draggable={false}
                   className="no-drag min-w-0 flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-sm"
                   value={editingName}
                   onChange={e=>setEditingName((e.target as HTMLInputElement).value)}
                   onMouseDown={e=>e.stopPropagation()}
-                  onKeyDown={e=>{ if (e.key==='Enter') { e.preventDefault(); commitRename(); } if (e.key==='Escape') { e.preventDefault(); setEditingId(null); } }}
+                  onKeyDown={e=>{ e.stopPropagation(); if (e.key==='Enter') { e.preventDefault(); commitRename(); } if (e.key==='Escape') { e.preventDefault(); setEditingId(null); } }}
+                  onDragStart={(e)=> e.stopPropagation()}
                   onBlur={commitRename}
                 />
               ) : (
