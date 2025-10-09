@@ -1108,7 +1108,7 @@ function BadgeGrid() {
         )}
 
         {activeTab==='INSIGHTS' ? (
-          <div className="px-8 pb-12 w-full max-w-7xl mx-auto">
+          <div className="mt-3 px-8 pb-12 w-full max-w-7xl mx-auto">
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-sky-900/40 via-slate-900/50 to-indigo-900/40 border border-slate-800">
                 <div className="text-slate-400 text-sm">Total watch time</div>
