@@ -452,7 +452,10 @@ function BadgeGrid() {
           setSidebarContentVisible(open);
         }
       } catch {}
-      setHistory(await window.api.getHistory());
+      const hist = await window.api.getHistory();
+      setHistory(hist);
+      // Preload Insights while splash is visible
+      try { buildInsights(hist); } catch {}
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
       try { setCategoryCovers(await window.api.getCategoryCovers()); } catch {}
       try { setAppSettings(await window.api.getAppSettings()); } catch {}
@@ -580,6 +583,7 @@ function BadgeGrid() {
   };
   const [insights, setInsights] = useState<InsightData | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsDirty, setInsightsDirty] = useState(true);
   const [dailyTotals, setDailyTotals] = useState<{ dates: string[]; minutes: number[] }>({ dates: [], minutes: [] });
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -653,10 +657,10 @@ function BadgeGrid() {
     return () => { try { off?.(); } catch {} };
   }, [showEditor, defs, achievementView]);
 
-  const buildInsights = async () => {
+  const buildInsights = async (historySnapshot?: Record<string, number>) => {
     try {
       setInsightsLoading(true);
-      const entries = Object.entries(history);
+      const entries = Object.entries(historySnapshot ?? history);
   if (!entries.length) { setInsights({ totalMinutes:0, last14Minutes:0, totalItems:0, byExt:[], byFolder:[], recent:[], completedCount:0, completed:[] }); setInsightsLoading(false); return; }
       // Recent: sort by value descending like Continue watching list
       const recentPaths = entries.sort((a,b)=> b[1]-a[1]).slice(0, 8).map(([p])=>p);
@@ -755,6 +759,7 @@ function BadgeGrid() {
       } catch {}
 
       setInsights({ totalMinutes, last14Minutes: last14Total, totalItems: allPaths.length, byExt, byFolder, recent, mostWatchedVideo, mostWatchedCategory, completedCount, completed: completedList.slice(0, 12) });
+      setInsightsDirty(false);
       try {
         const agg = await window.api.getDailyTotals(30);
         const minutes = agg.seconds.map((s: number) => Math.round(s/60));
@@ -769,9 +774,12 @@ function BadgeGrid() {
     }
   };
 
+  // Only build insights when needed: on first open or when marked dirty
   useEffect(() => {
-    if (activeTab === 'INSIGHTS') buildInsights();
-  }, [activeTab, history]);
+    if (activeTab === 'INSIGHTS' && (insightsDirty || !insights)) {
+      buildInsights();
+    }
+  }, [activeTab, insightsDirty]);
 
   // Poll achievement state while on ACHIEVEMENTS tab for live progress (pause while editing or in Manage view to avoid input jank)
   useEffect(()=>{
@@ -1109,6 +1117,12 @@ function BadgeGrid() {
 
         {activeTab==='INSIGHTS' ? (
           <div className="mt-3 px-8 pb-12 w-full max-w-7xl mx-auto">
+            {insightsLoading && (
+              <div className="relative h-1 mb-3 overflow-hidden rounded bg-slate-800">
+                <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-sky-500 to-indigo-400 animate-[insightbar_1.2s_ease-in-out_infinite]" />
+              </div>
+            )}
+            <style>{`@keyframes insightbar{0%{transform:translateX(-100%)}50%{transform:translateX(120%)}100%{transform:translateX(120%)}}`}</style>
             <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-xl p-5 min-h-[120px] bg-gradient-to-br from-sky-900/40 via-slate-900/50 to-indigo-900/40 border border-slate-800">
                 <div className="text-slate-400 text-sm">Total watch time</div>
@@ -1824,6 +1838,7 @@ function BadgeGrid() {
                         const toSend = Math.floor(watchAccumRef.current.accumulated);
                         if (toSend > 0) {
                           window.api.addWatchTime(path, toSend).catch(()=>{});
+                          setInsightsDirty(true);
                           watchAccumRef.current.accumulated -= toSend;
                           if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                             window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
@@ -1842,7 +1857,7 @@ function BadgeGrid() {
                     watchAccumRef.current = null;
                   }
                   const sec = Math.round((Date.now() - t.lastTick) / 1000);
-                  if (sec > 0) window.api.addWatchTime(t.path, sec).catch(()=>{});
+                  if (sec > 0) { window.api.addWatchTime(t.path, sec).catch(()=>{}); setInsightsDirty(true); }
                   try {
                     const v = e.currentTarget as HTMLVideoElement;
                     if (Number.isFinite(v.currentTime)) window.api.setLastPosition(t.path, v.currentTime).catch(()=>{});
@@ -1866,7 +1881,7 @@ function BadgeGrid() {
                     watchAccumRef.current = null;
                   }
                   const sec = Math.round((Date.now() - t.lastTick) / 1000);
-                  if (sec > 0) window.api.addWatchTime(t.path, sec).catch(()=>{});
+                  if (sec > 0) { window.api.addWatchTime(t.path, sec).catch(()=>{}); setInsightsDirty(true); }
                   try {
                     // mark last position at duration to indicate completion
                     const v = videoElRef.current;
