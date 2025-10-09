@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export type ToastItem = { id: number; type?: 'info' | 'success' | 'error' | 'warning'; message: string; timeout?: number; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary' };
+export type ToastItem = { id: number; type?: 'info' | 'success' | 'error' | 'warning'; message: string; timeout?: number; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; closing?: boolean };
 
 type ToastCtx = {
   show: (message: string, opts?: { type?: ToastItem['type']; timeout?: number; icon?: string; rarity?: ToastItem['rarity'] }) => void;
@@ -36,27 +36,44 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
   const show = useCallback((message: string, opts?: { type?: ToastItem['type']; timeout?: number; icon?: string; rarity?: ToastItem['rarity'] }) => {
     const id = Date.now() + Math.random();
-    const entry: ToastItem = { id, message, type: opts?.type ?? 'info', timeout: opts?.timeout ?? 3500, icon: opts?.icon, rarity: opts?.rarity };
+    const entry: ToastItem = { id, message, type: opts?.type ?? 'info', timeout: opts?.timeout ?? 3500, icon: opts?.icon, rarity: opts?.rarity, closing: false };
     setItems((prev) => [...prev, entry]);
     if (entry.timeout && entry.timeout > 0) {
-      setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), entry.timeout);
+      setTimeout(() => {
+        // start closing animation, then remove after it finishes
+        setItems((prev) => prev.map((t) => (t.id === id ? { ...t, closing: true } : t)));
+        setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 260);
+      }, entry.timeout);
     }
   }, []);
 
   const value = useMemo(() => ({ show }), [show]);
 
   const layer = (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[2000] flex flex-col gap-2">
+    <>
+      <style>{`
+        @keyframes toast-in { from { transform: translateX(18px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes toast-out { from { transform: translateX(0); opacity: 1 } to { transform: translateX(18px); opacity: 0 } }
+        .toast-animate-in { animation: toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .toast-animate-out { animation: toast-out 220ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+      `}</style>
+      <div className="pointer-events-none fixed bottom-4 right-4 z-[2000] flex flex-col gap-2">
       {items.map((t) => (
         <div
           key={t.id}
           className={[
-            'relative pl-3 pr-4 py-2 rounded shadow-lg border text-sm overflow-hidden group min-w-[260px] pointer-events-auto',
+            'relative pl-3 pr-4 py-2 rounded shadow-lg border text-sm overflow-hidden group min-w-[260px] pointer-events-auto transform-gpu will-change-transform',
+            t.closing ? 'toast-animate-out' : 'toast-animate-in',
             'backdrop-blur bg-slate-900/85',
             t.type === 'error' ? 'border-red-500/40 text-red-200' :
             t.type === 'success' ? 'border-emerald-500/40 text-emerald-200' :
             t.type === 'warning' ? 'border-yellow-500/40 text-yellow-200' : 'border-sky-500/40 text-slate-200',
           ].join(' ')}
+          onClick={() => {
+            // allow manual dismissal by click
+            setItems((prev) => prev.map((x) => (x.id === t.id ? { ...x, closing: true } : x)));
+            setTimeout(() => setItems((prev) => prev.filter((x) => x.id !== t.id)), 220);
+          }}
         >
           {t.rarity && (
             <div className={[
@@ -84,7 +101,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           </div>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 
   return (
