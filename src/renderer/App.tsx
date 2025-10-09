@@ -701,13 +701,15 @@ function BadgeGrid() {
         }
       }
 
-      // completed videos (>=95% watched or near end)
+      // completed videos (>=95% watched or near end: remaining <= 10s)
       const completedList: InsightData["completed"] = [];
       for (const p of allPaths) {
         const durSec = pathMeta[p]?.duration || 0;
         const totMin = statsMap[p]?.total || 0;
         const totSec = totMin * 60;
-        const nearEnd = (statsMap[p]?.lastPos ?? undefined) !== undefined ? ((statsMap[p]!.lastPos! <= 10) && durSec > 0) : false;
+        const lastPos = statsMap[p]?.lastPos;
+        const remaining = (durSec > 0 && typeof lastPos === 'number') ? Math.max(0, durSec - lastPos) : undefined;
+        const nearEnd = (remaining !== undefined) ? (remaining <= 10) : false;
         const ratio = durSec > 0 ? (totSec / durSec) : 0;
         const isCompleted = durSec > 0 && (ratio >= 0.95 || nearEnd);
         if (isCompleted) {
@@ -1832,7 +1834,16 @@ function BadgeGrid() {
                   }
                   const sec = Math.round((Date.now() - t.lastTick) / 1000);
                   if (sec > 0) window.api.addWatchTime(t.path, sec).catch(()=>{});
-                  try { window.api.setLastPosition(t.path, 0).catch(()=>{}); } catch {}
+                  try {
+                    // mark last position at duration to indicate completion
+                    const v = videoElRef.current;
+                    const dur = v && Number.isFinite(v.duration) ? v.duration : undefined;
+                    if (typeof dur === 'number') {
+                      window.api.setLastPosition(t.path, dur).catch(()=>{});
+                    } else {
+                      window.api.setLastPosition(t.path, 0).catch(()=>{});
+                    }
+                  } catch {}
                   watchTimerRef.current = null;
                   setVideoPaused(true);
                   updateControlsVisibility(true);
