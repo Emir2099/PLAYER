@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog, FaMinus, FaWindowMaximize, FaWindowRestore, FaTimes, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import SettingsModal from './components/SettingsModal';
 import { ToastProvider, useToast } from './components/Toast';
@@ -608,12 +609,12 @@ function BadgeGrid() {
       const rareType = payload.rarity === 'legendary' ? 'warning' : 'success';
       try { show(`Achievement Unlocked — ${payload.name}`, { type: rareType as any, icon: toastIcon, rarity: payload.rarity as any }); } catch {}
       // After unlock, refresh achievement state for immediate UI update
-      if (!showEditor) {
+      if (!showEditor && achievementView!=='manage') {
         window.api.getAchievementState?.().then(s=> setState(s)).catch(()=>{});
       }
     });
     return () => { try { off?.(); } catch {} };
-  }, [showEditor, defs]);
+  }, [showEditor, defs, achievementView]);
 
   const buildInsights = async () => {
     try {
@@ -733,9 +734,9 @@ function BadgeGrid() {
     if (activeTab === 'INSIGHTS') buildInsights();
   }, [activeTab, history]);
 
-  // Poll achievement state while on ACHIEVEMENTS tab for live progress (pause while editing to avoid input jank)
+  // Poll achievement state while on ACHIEVEMENTS tab for live progress (pause while editing or in Manage view to avoid input jank)
   useEffect(()=>{
-    if (activeTab !== 'ACHIEVEMENTS' || showEditor) return; // skip polling when editor open
+    if (activeTab !== 'ACHIEVEMENTS' || showEditor || achievementView==='manage') return; // skip polling when editing or managing
     let cancelled = false;
     const tick = async () => {
       try {
@@ -746,7 +747,7 @@ function BadgeGrid() {
     tick();
     const id = window.setInterval(tick, 5000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [activeTab, showEditor]);
+  }, [activeTab, showEditor, achievementView]);
 
   // Accumulator for mid-playback watch time batching for smoother, more frequent achievement progress updates
   const watchAccumRef = useRef<{ path: string; accumulated: number } | null>(null);
@@ -1274,14 +1275,18 @@ function BadgeGrid() {
               </div>
             )}
 
-            {showEditor && achievementView==='manage' && (
-              <div className="mb-8">
-                <AchievementEditor
-                  existing={editingId ? defs.find(d=>d.id===editingId) : undefined}
-                  onClose={()=>{ setShowEditor(false); setEditingId(null); }}
-                  onSaved={async ()=>{ try { setDefs(await window.api.getAchievements()); } catch {}; try { setState(await window.api.getAchievementState()); } catch {} }}
-                />
-              </div>
+            {showEditor && achievementView==='manage' && createPortal(
+              <div className="fixed inset-0 z-[1500] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6" onClick={()=>{ setShowEditor(false); setEditingId(null); }}>
+                <div className="w-full max-w-3xl" onClick={e=>e.stopPropagation()}>
+                  <AchievementEditor
+                    key={editingId || 'new'}
+                    existing={editingId ? defs.find(d=>d.id===editingId) : undefined}
+                    onClose={()=>{ setShowEditor(false); setEditingId(null); }}
+                    onSaved={async ()=>{ try { setDefs(await window.api.getAchievements()); } catch {}; try { setState(await window.api.getAchievementState()); } catch {} }}
+                  />
+                </div>
+              </div>,
+              document.body
             )}
 
             {/* Lists */}
