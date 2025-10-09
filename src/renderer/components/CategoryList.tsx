@@ -94,9 +94,9 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
         }}>+</button>
       </div>
       {creating && (
-        <div className="flex gap-2" draggable={false}>
+        <div className="flex gap-2" draggable={false} onMouseDown={e=>e.stopPropagation()}>
           <input ref={inputRef} autoFocus draggable={false}
-                 className="flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700"
+                 className="no-drag flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700"
                  placeholder="Category name"
                  value={newName}
                  onChange={e=>setNewName((e.target as HTMLInputElement).value)}
@@ -119,7 +119,8 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
               {editingId===c.id ? (
                 <input
                   ref={editInputRef}
-                  className="min-w-0 flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-sm"
+                  draggable={false}
+                  className="no-drag min-w-0 flex-1 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-sm"
                   value={editingName}
                   onChange={e=>setEditingName((e.target as HTMLInputElement).value)}
                   onMouseDown={e=>e.stopPropagation()}

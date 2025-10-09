@@ -1005,7 +1005,7 @@ function BadgeGrid() {
         )}
         <style>{`@keyframes fadeOut{from{opacity:1}to{opacity:0;visibility:hidden}}`}</style>
       <div
-        className={`hidden md:block border-r border-slate-800 min-h-[calc(100vh-2rem)] overflow-hidden transition-all duration-300 ease-in-out`}
+        className={`hidden md:block border-r border-slate-800 min-h-[calc(100vh-2rem)] overflow-x-visible overflow-y-auto transition-all duration-300 ease-in-out`}
         style={{ width: sidebarExpanded ? '18rem' : '0rem', padding: sidebarExpanded ? '1rem' : '0rem', willChange: 'width, padding' }}
       >
         <div
