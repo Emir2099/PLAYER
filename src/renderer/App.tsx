@@ -108,30 +108,38 @@ const Library: React.FC = () => {
   }, []);
 
 
-const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) => {
-  const [name, setName] = useState('New Achievement');
-  const [description, setDescription] = useState('');
-  const [icon, setIcon] = useState('🏆');
-  const [rarity, setRarity] = useState<'common'|'rare'|'epic'|'legendary'>('common');
-  const [metric, setMetric] = useState<'minutes'|'uniqueVideos'|'videosCompleted'|'minutesInWindow'>('minutes');
-  const [operator, setOperator] = useState<'>='|'=='|'<='|'>'|'<'>('>=');
-  const [target, setTarget] = useState(60);
-  const [rollingDays, setRollingDays] = useState(7);
-  const [exts, setExts] = useState('');
-  const [cats, setCats] = useState('');
+const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> = ({ onClose, existing }) => {
+  // Seed initial state from existing (edit) or defaults (create)
+  const [name, setName] = useState(existing?.name || 'New Achievement');
+  const [description, setDescription] = useState(existing?.description || '');
+  const [icon, setIcon] = useState(existing?.icon || '🏆');
+  const [rarity, setRarity] = useState<'common'|'rare'|'epic'|'legendary'>(existing?.rarity || 'common');
+  // Only first rule supported in UI for now
+  const firstRule = (existing?.rules && existing.rules[0]) || {};
+  const [metric, setMetric] = useState<'minutes'|'uniqueVideos'|'videosCompleted'|'minutesInWindow'>(firstRule.metric || 'minutes');
+  const [operator, setOperator] = useState(firstRule.operator || '>=');
+  const [target, setTarget] = useState(firstRule.target ?? 60);
+  const [rollingDays, setRollingDays] = useState(firstRule.window?.rollingDays ?? 7);
+  const [exts, setExts] = useState((firstRule.filters?.exts || []).join(','));
+  const [cats, setCats] = useState((firstRule.filters?.categories || []).join(','));
 
   const save = async () => {
     try {
-      const currentDefs = await window.api.getAchievements();
-      const id = (Math.random().toString(36).slice(2)) + Date.now();
+      const currentDefs = (await window.api.getAchievements()) || [];
       const filters: any = {};
       if (exts.trim()) filters.exts = exts.split(',').map((s: string) => s.trim()).filter(Boolean);
       if (cats.trim()) filters.categories = cats.split(',').map((s: string) => s.trim()).filter(Boolean);
       const rule: any = { metric, operator, target, filters };
       if (metric === 'minutesInWindow') rule.window = { rollingDays };
-      const def = { id, name, description, icon, rarity, rules: [rule], notify: true };
-      await window.api.setAchievements([...(currentDefs||[]), def]);
-      // Refresh list immediately
+      if (existing) {
+        // Update existing achievement (replace first rule only)
+        const updated = currentDefs.map((d: any) => d.id === existing.id ? { ...d, name, description, icon, rarity, rules: [rule] } : d);
+        await window.api.setAchievements(updated);
+      } else {
+        const id = (Math.random().toString(36).slice(2)) + Date.now();
+        const def = { id, name, description, icon, rarity, rules: [rule], notify: true };
+        await window.api.setAchievements([...(currentDefs||[]), def]);
+      }
       try { setDefs(await window.api.getAchievements()); } catch {}
       try { setState(await window.api.getAchievementState()); } catch {}
       onClose();
@@ -140,6 +148,12 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) =
 
   return (
     <div className="rounded-xl border border-slate-700 bg-steam-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-base font-semibold text-slate-200">{existing ? 'Edit Achievement' : 'Create Achievement'}</div>
+        {existing && (
+          <div className="text-[10px] italic text-slate-500">(Only first rule editable – multi-rule editor coming soon)</div>
+        )}
+      </div>
       {/* Name Row */}
       <div className="mb-4">
         <div className="text-xs text-slate-400 mb-1.5">Name</div>
@@ -226,7 +240,7 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) =
       <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: '1fr 1fr' }}>
         <div>
           <div className="text-xs text-slate-400 mb-1.5">Extensions (comma-separated)</div>
-          <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" placeholder="mp4,mkv" value={exts} onChange={e=>setExts(e.target.value)} />
+            <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" placeholder="mp4,mkv" value={exts} onChange={e=>setExts(e.target.value)} />
         </div>
         <div>
           <div className="text-xs text-slate-400 mb-1.5">Categories (ids or names, comma-separated)</div>
@@ -236,14 +250,14 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void }> = ({ onClose }) =
 
       {/* Action Buttons */}
       <div className="mt-6 flex gap-3">
-        <button onClick={save} className="px-4 py-2 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-sm">Save</button>
+        <button onClick={save} className="px-4 py-2 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-sm">{existing ? 'Update' : 'Save'}</button>
         <button onClick={onClose} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
       </div>
     </div>
   );
 };
 
-const AchievementList: React.FC = () => {
+const AchievementList: React.FC<{ onEdit: (id: string)=>void; onDelete: (id: string)=>void }> = ({ onEdit, onDelete }) => {
   return (
     <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
       {defs.length === 0 && (
@@ -254,7 +268,7 @@ const AchievementList: React.FC = () => {
         const unlocked = !!st.unlockedAt;
         const progress = st.progress;
         return (
-          <div key={d.id} className="rounded-lg border border-slate-800 bg-steam-card p-3">
+          <div key={d.id} className="rounded-lg border border-slate-800 bg-steam-card p-3 group">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 rounded bg-slate-800 flex items-center justify-center overflow-hidden">
                 {d.icon && (/^https?:|^file:|^data:/.test(d.icon)) ? (
@@ -264,8 +278,8 @@ const AchievementList: React.FC = () => {
                 )}
               </div>
               <div className="min-w-0">
-                <div className="text-slate-200 font-medium truncate">{d.name}</div>
-                <div className="text-slate-400 text-xs truncate">{d.description}</div>
+                <div className="text-slate-200 font-medium truncate" title={d.name}>{d.name}</div>
+                <div className="text-slate-400 text-xs truncate" title={d.description}>{d.description}</div>
               </div>
               <div className={`ml-auto text-xs px-2 py-0.5 rounded ${d.rarity==='legendary'?'bg-orange-600/30 text-orange-300': d.rarity==='epic'?'bg-purple-600/30 text-purple-300': d.rarity==='rare'?'bg-sky-600/30 text-sky-300':'bg-slate-600/30 text-slate-300'}`}>
                 {d.rarity || 'common'}
@@ -276,12 +290,16 @@ const AchievementList: React.FC = () => {
                 <div className="text-emerald-400 text-sm">Unlocked</div>
               ) : progress ? (
                 <>
-                  <div className="h-2 rounded bg-slate-800 overflow-hidden"><div className="h-full bg-sky-500" style={{ width: `${Math.min(100, Math.round((progress.current!/Math.max(1, progress.target!))*100))}%` }} /></div>
+                  <div className="h-2 rounded bg-slate-800 overflow-hidden"><div className="h-full bg-sky-500 transition-all" style={{ width: `${Math.min(100, Math.round((progress.current!/Math.max(1, progress.target!))*100))}%` }} /></div>
                   <div className="mt-1 text-xs text-slate-400">{progress.current}/{progress.target}</div>
                 </>
               ) : (
                 <div className="text-xs text-slate-500">Progress not available yet</div>
               )}
+            </div>
+            <div className="mt-2 flex gap-2 justify-end opacity-80 group-hover:opacity-100 transition-opacity">
+              <button onClick={()=>onEdit(d.id)} className="text-[11px] px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-600 text-slate-200">Edit</button>
+              <button onClick={()=>onDelete(d.id)} className="text-[11px] px-2 py-1 rounded bg-rose-700/40 hover:bg-rose-600/60 text-rose-200">Delete</button>
             </div>
           </div>
         );
@@ -444,12 +462,27 @@ const AchievementList: React.FC = () => {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [dailyTotals, setDailyTotals] = useState<{ dates: string[]; minutes: number[] }>({ dates: [], minutes: [] });
   const [showEditor, setShowEditor] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const handleDeleteAchievement = async (id: string) => {
+    try {
+      const ok = window.confirm ? window.confirm('Delete this achievement?') : true;
+      if (!ok) return;
+      const current = (await window.api.getAchievements()) || [];
+      await window.api.setAchievements(current.filter((d: any)=> d.id !== id));
+      try { setDefs(await window.api.getAchievements()); } catch {}
+      try { setState(await window.api.getAchievementState()); } catch {}
+      if (editingId === id) { setEditingId(null); setShowEditor(false); }
+    } catch {}
+  };
 
   // Listen for achievement unlocks and show a small toast (Steam-like bottom-right)
   useEffect(() => {
   const off = window.api.onAchievementUnlocked?.((payload: { name: string; icon?: string; rarity?: string }) => {
       const rareType = payload.rarity === 'legendary' ? 'warning' : 'success';
-      try { show(`Achievement Unlocked — ${payload.name}`, { type: rareType as any, icon: payload.icon }); } catch {}
+      try { show(`Achievement Unlocked — ${payload.name}`, { type: rareType as any, icon: payload.icon, rarity: payload.rarity as any }); } catch {}
+      // After unlock, refresh achievement state for immediate UI update
+      window.api.getAchievementState?.().then(s=> setState(s)).catch(()=>{});
     });
     return () => { try { off?.(); } catch {} };
   }, []);
@@ -571,6 +604,24 @@ const AchievementList: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'INSIGHTS') buildInsights();
   }, [activeTab, history]);
+
+  // Poll achievement state while on ACHIEVEMENTS tab for live progress (pause while editing to avoid input jank)
+  useEffect(()=>{
+    if (activeTab !== 'ACHIEVEMENTS' || showEditor) return; // skip polling when editor open
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const st = await window.api.getAchievementState();
+        if (!cancelled) setState(st);
+      } catch {}
+    };
+    tick();
+    const id = window.setInterval(tick, 5000);
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [activeTab, showEditor]);
+
+  // Accumulator for mid-playback watch time batching for smoother, more frequent achievement progress updates
+  const watchAccumRef = useRef<{ path: string; accumulated: number } | null>(null);
 
   // Ensure details for category items (videos/folders) are loaded even if outside current folder
   const hydrateCategoryItems = async (items: Array<{ type: 'video' | 'folder'; path: string }>) => {
@@ -1055,12 +1106,22 @@ const AchievementList: React.FC = () => {
           <div className="px-8 pb-12 w-full">
             <div className="flex items-center justify-between mb-6">
               <div className="text-slate-200 text-xl font-semibold">Achievements</div>
-              <button onClick={()=> setShowEditor(true)} className="px-4 py-2 rounded-md bg-sky-700 hover:bg-sky-600 text-white text-sm">Create</button>
+              {showEditor ? (
+                <button onClick={()=> { setShowEditor(false); setEditingId(null); }} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Close</button>
+              ) : (
+                <button onClick={()=> { setEditingId(null); setShowEditor(true); }} className="px-4 py-2 rounded-md bg-sky-700 hover:bg-sky-600 text-white text-sm">Create</button>
+              )}
             </div>
             {showEditor ? (
-              <InlineAchievementEditor onClose={()=> setShowEditor(false)} />
+              <InlineAchievementEditor
+                existing={editingId ? defs.find(d=>d.id===editingId) : undefined}
+                onClose={()=>{ setShowEditor(false); setEditingId(null); }}
+              />
             ) : (
-              <AchievementList />
+              <AchievementList
+                onEdit={(id)=> { setEditingId(id); setShowEditor(true); }}
+                onDelete={handleDeleteAchievement}
+              />
             )}
           </div>
         ) : (
@@ -1452,33 +1513,72 @@ const AchievementList: React.FC = () => {
                 onTimeUpdate={(e) => {
                   try {
                     const v = e.currentTarget as HTMLVideoElement;
-                    if (v && Number.isFinite(v.currentTime)) {
-                      const now = Date.now();
-                      if (now - posSaveTickRef.current > 5000) {
-                        if (watchTimerRef.current?.path) {
-                          window.api.setLastPosition(watchTimerRef.current.path, v.currentTime);
+                    if (!v || !Number.isFinite(v.currentTime)) return;
+                    const now = Date.now();
+                    // Save playback position every 5s
+                    if (now - posSaveTickRef.current > 5000) {
+                      if (watchTimerRef.current?.path) {
+                        window.api.setLastPosition(watchTimerRef.current.path, v.currentTime).catch(()=>{});
+                      }
+                      posSaveTickRef.current = now;
+                    }
+                    if (watchTimerRef.current?.path) {
+                      const path = watchTimerRef.current.path;
+                      if (!watchAccumRef.current || watchAccumRef.current.path !== path) {
+                        watchAccumRef.current = { path, accumulated: 0 };
+                      }
+                      const deltaSec = (now - watchTimerRef.current.lastTick) / 1000;
+                      if (deltaSec >= 1) {
+                        watchAccumRef.current.accumulated += deltaSec;
+                        watchTimerRef.current.lastTick = now;
+                      }
+                      // Flush every ~15s of accumulated actual watch time
+                      if (watchAccumRef.current.accumulated >= 15) {
+                        const toSend = Math.floor(watchAccumRef.current.accumulated);
+                        if (toSend > 0) {
+                          window.api.addWatchTime(path, toSend).catch(()=>{});
+                          watchAccumRef.current.accumulated -= toSend;
+                          if (activeTab === 'ACHIEVEMENTS') {
+                            window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
+                          }
                         }
-                        posSaveTickRef.current = now;
                       }
                     }
                   } catch {}
                 }}
                 onPause={(e) => {
                   const t = watchTimerRef.current; if (!t) return;
+                  // Flush partial accumulated batch first
+                  if (watchAccumRef.current && watchAccumRef.current.path === t.path) {
+                    const extra = Math.floor(watchAccumRef.current.accumulated);
+                    if (extra > 0) window.api.addWatchTime(t.path, extra).catch(()=>{});
+                    watchAccumRef.current = null;
+                  }
                   const sec = Math.round((Date.now() - t.lastTick) / 1000);
-                  if (sec > 0) window.api.addWatchTime(t.path, sec);
+                  if (sec > 0) window.api.addWatchTime(t.path, sec).catch(()=>{});
                   try {
                     const v = e.currentTarget as HTMLVideoElement;
-                    if (Number.isFinite(v.currentTime)) window.api.setLastPosition(t.path, v.currentTime);
+                    if (Number.isFinite(v.currentTime)) window.api.setLastPosition(t.path, v.currentTime).catch(()=>{});
                   } catch {}
                   watchTimerRef.current = null;
+                  if (activeTab === 'ACHIEVEMENTS') {
+                    window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
+                  }
                 }}
                 onEnded={() => {
                   const t = watchTimerRef.current; if (!t) return;
+                  if (watchAccumRef.current && watchAccumRef.current.path === t.path) {
+                    const extra = Math.floor(watchAccumRef.current.accumulated);
+                    if (extra > 0) window.api.addWatchTime(t.path, extra).catch(()=>{});
+                    watchAccumRef.current = null;
+                  }
                   const sec = Math.round((Date.now() - t.lastTick) / 1000);
-                  if (sec > 0) window.api.addWatchTime(t.path, sec);
-                  try { window.api.setLastPosition(t.path, 0); } catch {}
+                  if (sec > 0) window.api.addWatchTime(t.path, sec).catch(()=>{});
+                  try { window.api.setLastPosition(t.path, 0).catch(()=>{}); } catch {}
                   watchTimerRef.current = null;
+                  if (activeTab === 'ACHIEVEMENTS') {
+                    window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
+                  }
                 }}
               />
             </div>

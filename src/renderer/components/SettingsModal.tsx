@@ -11,6 +11,10 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const [ffprobePath, setFfprobePath] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [enableHoverPreviews, setEnableHoverPreviews] = useState<boolean>(true);
+  const [enableAchievementChime, setEnableAchievementChime] = useState<boolean>(true);
+
+  // Minimal runtime-safe typing for extended settings
+  type AppSettings = { enableHoverPreviews?: boolean; enableAchievementChime?: boolean };
 
   useEffect(() => {
     if (!open) return;
@@ -19,8 +23,9 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
       setFfmpegPath(curr.ffmpegPath || '');
       setFfprobePath(curr.ffprobePath || '');
       try {
-        const s = await window.api.getAppSettings();
+        const s: AppSettings = await window.api.getAppSettings();
         setEnableHoverPreviews(!!s.enableHoverPreviews);
+        if (typeof s.enableAchievementChime === 'boolean') setEnableAchievementChime(!!s.enableAchievementChime);
       } catch {}
     })();
   }, [open]);
@@ -36,7 +41,7 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
     setSaving(true);
     try {
       await window.api.setFFPaths({ ffmpegPath: ffmpegPath || undefined, ffprobePath: ffprobePath || undefined });
-      await window.api.setAppSettings({ enableHoverPreviews });
+  await window.api.setAppSettings({ enableHoverPreviews, enableAchievementChime } as any);
       onSaved?.();
       onClose();
     } finally {
@@ -61,6 +66,18 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
               <span className="text-sm text-slate-200">Enable hover video previews</span>
             </label>
             <div className="text-xs text-slate-400 mt-1">When enabled, the hover panel plays a short, muted loop of the video.</div>
+          </div>
+          <div>
+            <label className="inline-flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={enableAchievementChime}
+                onChange={e => setEnableAchievementChime(e.target.checked)}
+                className="accent-steam-accent"
+              />
+              <span className="text-sm text-slate-200">Play sound on achievement unlock</span>
+            </label>
+            <div className="text-xs text-slate-400 mt-1">Adds a short chime when an achievement toast appears.</div>
           </div>
           <div>
             <div className="text-sm text-slate-300 mb-1">FFmpeg path (optional)</div>
