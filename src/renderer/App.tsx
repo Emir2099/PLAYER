@@ -98,7 +98,7 @@ const Library: React.FC = () => {
 
 // --- Achievements minimal list ---
             
-  const [defs, setDefs] = useState<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: string }>>([]);
+  const [defs, setDefs] = useState<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: string; badge?: { name?: string; icon?: string } }>>([]);
   const [state, setState] = useState<Record<string, { unlockedAt?: string; progress?: { current: number; target: number } }>>({});
   useEffect(() => {
     (async () => {
@@ -114,6 +114,10 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> =
   const [description, setDescription] = useState(existing?.description || '');
   const [icon, setIcon] = useState(existing?.icon || '🏆');
   const [rarity, setRarity] = useState<'common'|'rare'|'epic'|'legendary'>(existing?.rarity || 'common');
+  // Badge customization (optional)
+  const [badgeEnabled, setBadgeEnabled] = useState(!!existing?.badge);
+  const [badgeName, setBadgeName] = useState(existing?.badge?.name || '');
+  const [badgeIcon, setBadgeIcon] = useState(existing?.badge?.icon || '');
   // Only first rule supported in UI for now
   const firstRule = (existing?.rules && existing.rules[0]) || {};
   const [metric, setMetric] = useState<'minutes'|'uniqueVideos'|'videosCompleted'|'minutesInWindow'>(firstRule.metric || 'minutes');
@@ -133,11 +137,23 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> =
       if (metric === 'minutesInWindow') rule.window = { rollingDays };
       if (existing) {
         // Update existing achievement (replace first rule only)
-        const updated = currentDefs.map((d: any) => d.id === existing.id ? { ...d, name, description, icon, rarity, rules: [rule] } : d);
+        const updated = currentDefs.map((d: any) => {
+          if (d.id !== existing.id) return d;
+          const base = { ...d, name, description, icon, rarity, rules: [rule] };
+          if (badgeEnabled && (badgeName.trim() || badgeIcon.trim())) {
+            (base as any).badge = { name: badgeName.trim() || name, icon: badgeIcon.trim() || icon };
+          } else {
+            delete (base as any).badge;
+          }
+          return base;
+        });
         await window.api.setAchievements(updated);
       } else {
         const id = (Math.random().toString(36).slice(2)) + Date.now();
-        const def = { id, name, description, icon, rarity, rules: [rule], notify: true };
+        const def: any = { id, name, description, icon, rarity, rules: [rule], notify: true };
+        if (badgeEnabled && (badgeName.trim() || badgeIcon.trim())) {
+          def.badge = { name: badgeName.trim() || name, icon: badgeIcon.trim() || icon };
+        }
         await window.api.setAchievements([...(currentDefs||[]), def]);
       }
       try { setDefs(await window.api.getAchievements()); } catch {}
@@ -199,6 +215,39 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> =
       <div className="mb-5">
         <div className="text-xs text-slate-400 mb-1.5">Description</div>
         <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={description} onChange={e=>setDescription(e.target.value)} />
+      </div>
+
+      {/* Badge Section */}
+      <div className="mb-6 border border-slate-700/70 rounded-md p-4 bg-slate-900/40">
+        <div className="flex items-center gap-3 mb-3">
+          <input id="chk-badge" type="checkbox" className="h-4 w-4" checked={badgeEnabled} onChange={e=>setBadgeEnabled(e.target.checked)} />
+          <label htmlFor="chk-badge" className="text-sm font-medium text-slate-200">Attach Badge (shown in Completed view)</label>
+        </div>
+        {badgeEnabled && (
+          <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div>
+              <div className="text-xs text-slate-400 mb-1.5">Badge Name</div>
+              <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" placeholder="Defaults to achievement name" value={badgeName} onChange={e=>setBadgeName(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 mb-1.5">Badge Icon / Image</div>
+              <div className="flex gap-2">
+                <input className="flex-1 bg-slate-800 rounded-md px-3 h-10 text-sm" value={badgeIcon} onChange={e=>setBadgeIcon(e.target.value)} placeholder="Emoji or file path" />
+                <button
+                  type="button"
+                  className="px-3 h-10 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
+                  onClick={async ()=>{ try { const sel = await window.api.selectFile?.([{ name: 'Images', extensions: ['png','jpg','jpeg','gif','webp'] }]); if (sel) setBadgeIcon(fileUrl(sel)); } catch {} }}
+                >Image…</button>
+              </div>
+              {(badgeIcon && /^https?:|^file:|^data:/.test(badgeIcon)) && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                  <img src={badgeIcon} className="h-5 w-5 object-cover rounded" />
+                  <span className="truncate">{badgeIcon}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Rule Section */}
@@ -326,6 +375,32 @@ const AchievementList: React.FC<{
     </div>
   );
 };
+
+// Badge grid for completed achievements (standalone, outside navigateTo for scope)
+function BadgeGrid() {
+  const earned = defs.filter(d => state[d.id]?.unlockedAt && (d as any).badge);
+  if (!earned.length) return <div className="text-slate-500 text-sm">No badges earned yet.</div>;
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' }}>
+      {earned.map(d => {
+        const b: any = (d as any).badge || {};
+        return (
+          <div key={d.id} className="relative rounded-lg border border-slate-700 bg-slate-900/50 p-3 flex flex-col items-center text-center hover:border-slate-600/80 transition-colors">
+            <div className="h-14 w-14 rounded-md bg-slate-800 flex items-center justify-center overflow-hidden mb-2 ring-1 ring-slate-600">
+              {b.icon && (/^https?:|^file:|^data:/.test(b.icon)) ? (
+                <img src={b.icon} className="h-8 w-8 object-cover" />
+              ) : (
+                <span className="text-3xl leading-none">{b.icon || '🎖️'}</span>
+              )}
+            </div>
+            <div className="text-[11px] font-medium text-slate-200 truncate w-full" title={b.name || d.name}>{b.name || d.name}</div>
+            <div className="mt-1 text-[10px] text-slate-500 truncate w-full" title={d.name}>{d.name}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
   const navigateTo = async (dir: string) => {
     setFolder(dir);
@@ -499,8 +574,14 @@ const AchievementList: React.FC<{
   // Listen for achievement unlocks and show a small toast (Steam-like bottom-right)
   useEffect(() => {
   const off = window.api.onAchievementUnlocked?.((payload: { name: string; icon?: string; rarity?: string }) => {
+      // If the unlocked achievement has a badge defined, prefer its icon in toast
+      let toastIcon = payload.icon;
+      try {
+  const match: any = defs.find(d=>d.name===payload.name);
+  if (match?.badge?.icon) toastIcon = match.badge.icon;
+      } catch {}
       const rareType = payload.rarity === 'legendary' ? 'warning' : 'success';
-      try { show(`Achievement Unlocked — ${payload.name}`, { type: rareType as any, icon: payload.icon, rarity: payload.rarity as any }); } catch {}
+      try { show(`Achievement Unlocked — ${payload.name}`, { type: rareType as any, icon: toastIcon, rarity: payload.rarity as any }); } catch {}
       // After unlock, refresh achievement state for immediate UI update
       window.api.getAchievementState?.().then(s=> setState(s)).catch(()=>{});
     });
@@ -1172,12 +1253,21 @@ const AchievementList: React.FC<{
 
             {/* Lists */}
             {achievementView==='completed' && (
-              <AchievementList
-                mode="completed"
-                manage={false}
-                onEdit={()=>{}}
-                onDelete={()=>{}}
-              />
+              <div className="flex flex-col lg:flex-row gap-8">
+                <div className="flex-1 min-w-0">
+                  <div className="mb-3 text-sm font-semibold text-slate-300">Completed Achievements</div>
+                  <AchievementList
+                    mode="completed"
+                    manage={false}
+                    onEdit={()=>{}}
+                    onDelete={()=>{}}
+                  />
+                </div>
+                <div className="w-full lg:w-80 xl:w-96 flex-shrink-0">
+                  <div className="mb-3 text-sm font-semibold text-slate-300 flex items-center gap-2">Badges <span className="text-[11px] font-normal text-slate-500">(earned)</span></div>
+                  <BadgeGrid />
+                </div>
+              </div>
             )}
             {achievementView==='remaining' && (
               <AchievementList
@@ -1667,7 +1757,7 @@ const AchievementList: React.FC<{
     </div>
     </div>
   );
-};
+}
 
 const App: React.FC = () => (
   <ToastProvider>
