@@ -44,71 +44,12 @@ function formatDuration(sec?: number) {
   return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
-const Library: React.FC = () => {
-  const [isMax, setIsMax] = useState(false);
-  const [folder, setFolder] = useState<string>('');
-  const [videos, setVideos] = useState<VideoItem[]>([]);
-  const [folders, setFolders] = useState<Array<{ path: string; name: string; mtime: number }>>([]);
-  const [folderCovers, setFolderCovers] = useState<Record<string, string>>({});
-  const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
-  const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<VideoItem | null>(null);
-  const [history, setHistory] = useState<Record<string, number>>({});
-  const [showSettings, setShowSettings] = useState(false);
-  const [categories] = useState<string[]>(['All', 'Movies', 'Clips', 'Series']);
-  const [activeCategory, setActiveCategory] = useState<string>('All');
-  const gridRef = useRef<HTMLDivElement | null>(null);
-  const ioRef = useRef<IntersectionObserver | null>(null);
-  const { show } = useToast();
-  const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[]; path?: string; lastPositionSec?: number } | null>(null);
-  const [appSettings, setAppSettings] = useState<{ enableHoverPreviews: boolean }>({ enableHoverPreviews: true });
-  
-  const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-          
-  const [categoryItems, setCategoryItems] = useState<Array<{ type: 'video' | 'folder'; path: string }>>([]);
-  const [categoryVideoMap, setCategoryVideoMap] = useState<Record<string, VideoItem>>({});
-  const [categoryFolderMap, setCategoryFolderMap] = useState<Record<string, { path: string; name: string; mtime: number }>>({});
-  const [libFolderPath, setLibFolderPath] = useState<string | null>(null);
-  const [libFolderVideos, setLibFolderVideos] = useState<VideoItem[]>([]);
-  const [categoryCovers, setCategoryCovers] = useState<Record<string, string>>({});
-  const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; id: string } | null>(null);
-  const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>([]);
-          
-  const [showTabSwitcher, setShowTabSwitcher] = useState(false);
-  // Sidebar animation: expanded controls width; contentVisible controls fade
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
-  const [sidebarContentVisible, setSidebarContentVisible] = useState(true);
-  const sidebarAnimTimers = useRef<number[]>([]);
-  // INSIGHTS carousels (pagination & scroll)
-  const recentScrollRef = useRef<HTMLDivElement | null>(null);
-  const completedScrollRef = useRef<HTMLDivElement | null>(null);
-  const [recentPage, setRecentPage] = useState(0);
-  const [completedPage, setCompletedPage] = useState(0);
-  const [completedPages, setCompletedPages] = useState(0);
-  // Missing UI state restored
-  const [recentPages, setRecentPages] = useState(0);
-  const [activeTab, setActiveTab] = useState<'GLOBAL'|'LIBRARY'|'INSIGHTS'|'ACHIEVEMENTS'>('GLOBAL');
-  const [sort, setSort] = useState<SortKey>('recent');
-  const [bootOverlay, setBootOverlay] = useState(true);
-  const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
-  const hoverDelayRef = useRef<number | null>(null);
-  const watchTimerRef = useRef<{ path: string; lastTick: number } | null>(null);
-  const posSaveTickRef = useRef<number>(0);
-
-// --- Achievements minimal list ---
-            
-  const [defs, setDefs] = useState<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: string; badge?: { name?: string; icon?: string } }>>([]);
-  const [state, setState] = useState<Record<string, { unlockedAt?: string; progress?: { current: number; target: number } }>>({});
-  useEffect(() => {
-    (async () => {
-      try { setDefs(await window.api.getAchievements()); } catch {}
-      try { setState(await window.api.getAchievementState()); } catch {}
-    })();
-  }, []);
-
-
-const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> = ({ onClose, existing }) => {
+// Standalone Achievement Editor to avoid parent re-renders causing input jank
+const AchievementEditor: React.FC<{
+  existing?: any;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ existing, onClose, onSaved }) => {
   // Seed initial state from existing (edit) or defaults (create)
   const [name, setName] = useState(existing?.name || 'New Achievement');
   const [description, setDescription] = useState(existing?.description || '');
@@ -121,7 +62,7 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> =
   // Only first rule supported in UI for now
   const firstRule = (existing?.rules && existing.rules[0]) || {};
   const [metric, setMetric] = useState<'minutes'|'uniqueVideos'|'videosCompleted'|'minutesInWindow'>(firstRule.metric || 'minutes');
-  const [operator, setOperator] = useState(firstRule.operator || '>=');
+  const [operator, setOperator] = useState(firstRule.operator || '>=' as any);
   const [target, setTarget] = useState(firstRule.target ?? 60);
   const [rollingDays, setRollingDays] = useState(firstRule.window?.rollingDays ?? 7);
   const [exts, setExts] = useState((firstRule.filters?.exts || []).join(','));
@@ -156,8 +97,7 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> =
         }
         await window.api.setAchievements([...(currentDefs||[]), def]);
       }
-      try { setDefs(await window.api.getAchievements()); } catch {}
-      try { setState(await window.api.getAchievementState()); } catch {}
+      onSaved();
       onClose();
     } catch {}
   };
@@ -305,6 +245,70 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> =
     </div>
   );
 };
+
+const Library: React.FC = () => {
+  const [isMax, setIsMax] = useState(false);
+  const [folder, setFolder] = useState<string>('');
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [folders, setFolders] = useState<Array<{ path: string; name: string; mtime: number }>>([]);
+  const [folderCovers, setFolderCovers] = useState<Record<string, string>>({});
+  const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<VideoItem | null>(null);
+  const [history, setHistory] = useState<Record<string, number>>({});
+  const [showSettings, setShowSettings] = useState(false);
+  const [categories] = useState<string[]>(['All', 'Movies', 'Clips', 'Series']);
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const ioRef = useRef<IntersectionObserver | null>(null);
+  const { show } = useToast();
+  const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[]; path?: string; lastPositionSec?: number } | null>(null);
+  const [appSettings, setAppSettings] = useState<{ enableHoverPreviews: boolean }>({ enableHoverPreviews: true });
+  
+  const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+          
+  const [categoryItems, setCategoryItems] = useState<Array<{ type: 'video' | 'folder'; path: string }>>([]);
+  const [categoryVideoMap, setCategoryVideoMap] = useState<Record<string, VideoItem>>({});
+  const [categoryFolderMap, setCategoryFolderMap] = useState<Record<string, { path: string; name: string; mtime: number }>>({});
+  const [libFolderPath, setLibFolderPath] = useState<string | null>(null);
+  const [libFolderVideos, setLibFolderVideos] = useState<VideoItem[]>([]);
+  const [categoryCovers, setCategoryCovers] = useState<Record<string, string>>({});
+  const [categoryMenu, setCategoryMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const [allCategories, setAllCategories] = useState<Array<{ id: string; name: string; items: Array<{ type: 'video' | 'folder'; path: string }> }>>([]);
+          
+  const [showTabSwitcher, setShowTabSwitcher] = useState(false);
+  // Sidebar animation: expanded controls width; contentVisible controls fade
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [sidebarContentVisible, setSidebarContentVisible] = useState(true);
+  const sidebarAnimTimers = useRef<number[]>([]);
+  // INSIGHTS carousels (pagination & scroll)
+  const recentScrollRef = useRef<HTMLDivElement | null>(null);
+  const completedScrollRef = useRef<HTMLDivElement | null>(null);
+  const [recentPage, setRecentPage] = useState(0);
+  const [completedPage, setCompletedPage] = useState(0);
+  const [completedPages, setCompletedPages] = useState(0);
+  // Missing UI state restored
+  const [recentPages, setRecentPages] = useState(0);
+  const [activeTab, setActiveTab] = useState<'GLOBAL'|'LIBRARY'|'INSIGHTS'|'ACHIEVEMENTS'>('GLOBAL');
+  const [sort, setSort] = useState<SortKey>('recent');
+  const [bootOverlay, setBootOverlay] = useState(true);
+  const [hoverRect, setHoverRect] = useState<DOMRect | null>(null);
+  const hoverDelayRef = useRef<number | null>(null);
+  const watchTimerRef = useRef<{ path: string; lastTick: number } | null>(null);
+  const posSaveTickRef = useRef<number>(0);
+
+// --- Achievements minimal list ---
+            
+  const [defs, setDefs] = useState<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: string; badge?: { name?: string; icon?: string } }>>([]);
+  const [state, setState] = useState<Record<string, { unlockedAt?: string; progress?: { current: number; target: number } }>>({});
+  useEffect(() => {
+    (async () => {
+      try { setDefs(await window.api.getAchievements()); } catch {}
+      try { setState(await window.api.getAchievementState()); } catch {}
+    })();
+  }, []);
+
 
 const AchievementList: React.FC<{
   onEdit: (id: string)=>void;
@@ -561,6 +565,24 @@ function BadgeGrid() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [achievementView, setAchievementView] = useState<'completed'|'remaining'|'manage'>('completed');
+  // Video fullscreen management (use wrapper fullscreen instead of native video fullscreen)
+  const videoWrapRef = useRef<HTMLDivElement | null>(null);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+  const [playerFullscreen, setPlayerFullscreen] = useState(false);
+  useEffect(() => {
+    const onFs = () => {
+      const isFs = !!(document.fullscreenElement && videoWrapRef.current && document.fullscreenElement === videoWrapRef.current);
+      setPlayerFullscreen(isFs);
+    };
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+  // Ensure native fullscreen button is disabled on the video element
+  useEffect(() => {
+    const el = videoElRef.current;
+    if (!el) return;
+    try { (el as any).setAttribute('controlsList', 'nofullscreen'); } catch {}
+  }, [selected]);
 
   const handleDeleteAchievement = async (id: string) => {
     try {
@@ -586,10 +608,12 @@ function BadgeGrid() {
       const rareType = payload.rarity === 'legendary' ? 'warning' : 'success';
       try { show(`Achievement Unlocked — ${payload.name}`, { type: rareType as any, icon: toastIcon, rarity: payload.rarity as any }); } catch {}
       // After unlock, refresh achievement state for immediate UI update
-      window.api.getAchievementState?.().then(s=> setState(s)).catch(()=>{});
+      if (!showEditor) {
+        window.api.getAchievementState?.().then(s=> setState(s)).catch(()=>{});
+      }
     });
     return () => { try { off?.(); } catch {} };
-  }, []);
+  }, [showEditor, defs]);
 
   const buildInsights = async () => {
     try {
@@ -821,6 +845,11 @@ function BadgeGrid() {
         .titlebar .is-win-btn{ outline: none; box-shadow: none; }
         .titlebar .is-win-btn:focus{ outline: none; box-shadow: none; }
         .titlebar .is-win-btn:focus-visible{ outline: 2px solid rgba(148,163,184,0.45); outline-offset: 2px; border-radius: 6px; }
+        /* Player fullscreen sizing (via :fullscreen and class fallback) */
+        .player-fs-root:fullscreen { position: fixed; inset: 0; width: 100vw; height: 100vh; background: #000; overflow: hidden; }
+        .player-fs-root:fullscreen .player-video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none !important; max-height: none !important; object-fit: contain; background: #000; }
+        .player-fs-root.player-fs-active { position: fixed; inset: 0; width: 100vw; height: 100vh; background: #000; overflow: hidden; }
+        .player-fs-root.player-fs-active .player-video { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none !important; max-height: none !important; object-fit: contain; background: #000; }
       `}</style>
       {/* Custom Title Bar */}
       <div className="titlebar fixed top-0 left-0 right-0 h-8 z-50 bg-gradient-to-r from-[#0e141c] via-[#111827] to-[#0e141c] border-b border-slate-800/80">
@@ -1247,9 +1276,10 @@ function BadgeGrid() {
 
             {showEditor && achievementView==='manage' && (
               <div className="mb-8">
-                <InlineAchievementEditor
+                <AchievementEditor
                   existing={editingId ? defs.find(d=>d.id===editingId) : undefined}
                   onClose={()=>{ setShowEditor(false); setEditingId(null); }}
+                  onSaved={async ()=>{ try { setDefs(await window.api.getAchievements()); } catch {}; try { setState(await window.api.getAchievementState()); } catch {} }}
                 />
               </div>
             )}
@@ -1663,14 +1693,41 @@ function BadgeGrid() {
           <div className="bg-steam-panel rounded-lg overflow-hidden w-full max-w-5xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
               <div className="font-semibold text-slate-100 truncate pr-4">{selected.name}</div>
-              <button onClick={() => setSelected(null)} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">Close</button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      if (!playerFullscreen && videoWrapRef.current) {
+                        await videoWrapRef.current.requestFullscreen();
+                      } else if (document.fullscreenElement) {
+                        await document.exitFullscreen();
+                      }
+                    } catch {}
+                  }}
+                  className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700"
+                >{playerFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</button>
+                <button onClick={() => setSelected(null)} className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700">Close</button>
+              </div>
             </div>
             <div className="bg-black">
+              <div ref={videoWrapRef} className={`relative player-fs-root ${playerFullscreen ? 'player-fs-active' : ''}`}>
               <video
+                ref={videoElRef}
                 src={fileUrl(selected.path)}
                 controls
                 autoPlay
-                className="w-full max-h-[70vh]"
+                className={'player-video w-full max-h-[70vh] object-contain bg-black'}
+                onDoubleClick={async (e) => {
+                  // Prefer wrapper fullscreen on double click
+                  e.preventDefault();
+                  try {
+                    if (!playerFullscreen && videoWrapRef.current) {
+                      await videoWrapRef.current.requestFullscreen();
+                    } else if (document.fullscreenElement) {
+                      await document.exitFullscreen();
+                    }
+                  } catch {}
+                }}
                 onPlay={() => {
                   window.api.markWatched(selected.path);
                   watchTimerRef.current = { path: selected.path, lastTick: Date.now() };
@@ -1703,7 +1760,7 @@ function BadgeGrid() {
                         if (toSend > 0) {
                           window.api.addWatchTime(path, toSend).catch(()=>{});
                           watchAccumRef.current.accumulated -= toSend;
-                          if (activeTab === 'ACHIEVEMENTS') {
+                          if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                             window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                           }
                         }
@@ -1726,7 +1783,7 @@ function BadgeGrid() {
                     if (Number.isFinite(v.currentTime)) window.api.setLastPosition(t.path, v.currentTime).catch(()=>{});
                   } catch {}
                   watchTimerRef.current = null;
-                  if (activeTab === 'ACHIEVEMENTS') {
+                  if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
                 }}
@@ -1741,11 +1798,12 @@ function BadgeGrid() {
                   if (sec > 0) window.api.addWatchTime(t.path, sec).catch(()=>{});
                   try { window.api.setLastPosition(t.path, 0).catch(()=>{}); } catch {}
                   watchTimerRef.current = null;
-                  if (activeTab === 'ACHIEVEMENTS') {
+                  if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
                 }}
               />
+              </div>
             </div>
           </div>
         </div>
