@@ -1121,41 +1121,89 @@ function BadgeGrid() {
           </div>
         </div>
 
-  {/* Breadcrumbs (only show for GLOBAL & LIBRARY tabs) */}
+  {/* Breadcrumbs: GLOBAL shows filesystem; LIBRARY shows UI hierarchy (Library -> Category -> Folder) */}
   {(activeTab==='GLOBAL' || activeTab==='LIBRARY') && (
     <>
       <div className="px-6 pt-2 flex items-center gap-2"></div>
       <div className="px-8 py-3">
         <div className="text-sm text-slate-300/90 overflow-x-auto whitespace-nowrap scrollbar-thin pr-2">
           {(() => {
-              const segs: Array<{ label: string; path: string }> = [];
-              if (/^[A-Za-z]:\\/.test(folder)) {
-                const drive = folder.slice(0, 3);
-                segs.push({ label: drive, path: drive });
-                const rest = folder.slice(3).split('\\').filter(Boolean);
-                let acc = drive;
-                for (const part of rest) {
-                  acc = acc.endsWith('\\') ? acc + part : acc + '\\' + part;
-                  segs.push({ label: part, path: acc });
+              if (activeTab === 'LIBRARY') {
+                const segs: Array<{ label: string; onClick?: () => void; key: string }> = [];
+                // Library root
+                segs.push({
+                  key: 'lib-root',
+                  label: 'Library',
+                  onClick: async () => {
+                    setActiveTab('LIBRARY');
+                    setSelectedCategoryId(null);
+                    setCategoryItems([]);
+                    setLibFolderPath(null);
+                    setLibFolderVideos([]);
+                    try { await window.api.setUiPrefs({ categoryView: true, selectedCategoryId: null }); } catch {}
+                  }
+                });
+                if (selectedCategoryId) {
+                  const catName = (allCategories.find(c=>c.id===selectedCategoryId)?.name) || 'Category';
+                  segs.push({
+                    key: 'lib-cat',
+                    label: catName,
+                    onClick: async () => {
+                      setLibFolderPath(null);
+                      setLibFolderVideos([]);
+                      try { await window.api.setUiPrefs({ categoryView: true, selectedCategoryId }); } catch {}
+                    }
+                  });
+                  if (libFolderPath) {
+                    const folderLabel = libFolderPath.split('\\').pop() || libFolderPath;
+                    segs.push({ key: 'lib-folder', label: folderLabel });
+                  }
                 }
-              } else if (folder) {
-                const rest = folder.split('\\').filter(Boolean);
-                let acc = '';
-                for (const part of rest) {
-                  acc = acc ? acc + '\\' + part : part;
-                  segs.push({ label: part, path: acc });
+                return (
+                  <>
+                    {segs.map((s, i) => (
+                      <span key={s.key}>
+                        {i>0 && <span className="mx-1 text-slate-500">/</span>}
+                        {s.onClick ? (
+                          <button className={`hover:underline ${i===segs.length-1? 'text-white' : 'text-slate-200'}`} onClick={s.onClick}>{s.label}</button>
+                        ) : (
+                          <span className="text-white">{s.label}</span>
+                        )}
+                      </span>
+                    ))}
+                  </>
+                );
+              } else {
+                // GLOBAL: show filesystem path breadcrumbs
+                const segs: Array<{ label: string; path: string }> = [];
+                if (/^[A-Za-z]:\\/.test(folder)) {
+                  const drive = folder.slice(0, 3);
+                  segs.push({ label: drive, path: drive });
+                  const rest = folder.slice(3).split('\\').filter(Boolean);
+                  let acc = drive;
+                  for (const part of rest) {
+                    acc = acc.endsWith('\\') ? acc + part : acc + '\\' + part;
+                    segs.push({ label: part, path: acc });
+                  }
+                } else if (folder) {
+                  const rest = folder.split('\\').filter(Boolean);
+                  let acc = '';
+                  for (const part of rest) {
+                    acc = acc ? acc + '\\' + part : part;
+                    segs.push({ label: part, path: acc });
+                  }
                 }
+                return (
+                  <>
+                    {segs.map((s, i) => (
+                      <span key={s.path}>
+                        {i>0 && <span className="mx-1 text-slate-500">/</span>}
+                        <button className={`hover:underline ${i===segs.length-1? 'text-white' : 'text-slate-200'}`} onClick={() => navigateTo(s.path)}>{s.label}</button>
+                      </span>
+                    ))}
+                  </>
+                );
               }
-              return (
-                <>
-                  {segs.map((s, i) => (
-                    <span key={s.path}>
-                      {i>0 && <span className="mx-1 text-slate-500">/</span>}
-                      <button className={`hover:underline ${i===segs.length-1? 'text-white' : 'text-slate-200'}`} onClick={() => navigateTo(s.path)}>{s.label}</button>
-                    </span>
-                  ))}
-                </>
-              );
           })()}
         </div>
       </div>
