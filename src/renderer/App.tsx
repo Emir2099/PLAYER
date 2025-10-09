@@ -858,8 +858,8 @@ const AchievementList: React.FC<{ onEdit: (id: string)=>void; onDelete: (id: str
           </div>
         </div>
 
-  {/* Breadcrumbs (hidden on INSIGHTS) */}
-  {activeTab !== 'INSIGHTS' && (
+  {/* Breadcrumbs (only show for GLOBAL & LIBRARY tabs) */}
+  {(activeTab==='GLOBAL' || activeTab==='LIBRARY') && (
     <>
       <div className="px-6 pt-2 flex items-center gap-2"></div>
       <div className="px-8 py-3">
