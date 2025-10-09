@@ -298,6 +298,24 @@ const Library: React.FC = () => {
   const hoverDelayRef = useRef<number | null>(null);
   const watchTimerRef = useRef<{ path: string; lastTick: number } | null>(null);
   const posSaveTickRef = useRef<number>(0);
+  // Tracks fully completed videos (>=95% watched OR <=10s remaining)
+  const [completedMap, setCompletedMap] = useState<Record<string, boolean>>({});
+
+  const recomputeCompletion = async (path: string, durationHint?: number, statsHint?: { totalMinutes?: number; lastPositionSec?: number }) => {
+    try {
+      const meta = (typeof durationHint === 'number') ? { duration: durationHint } : await window.api.getMeta(path).catch(()=>({})) || {};
+      const durSec = (meta as any)?.duration || 0;
+      if (!durSec || !Number.isFinite(durSec)) { return; }
+  const fetchedStats = await window.api.getWatchStats(path).catch(() => ({}));
+  const stats = (statsHint ?? fetchedStats ?? {}) as any;
+      const totSec = Math.round((stats.totalMinutes || 0) * 60);
+      const lastPos = stats.lastPositionSec;
+      const remaining = (typeof lastPos === 'number') ? Math.max(0, durSec - lastPos) : undefined;
+      const ratio = durSec > 0 ? (totSec / durSec) : 0;
+      const completed = durSec > 0 && (ratio >= 0.95 || (remaining !== undefined && remaining <= 10));
+      setCompletedMap(prev => (prev[path] === completed ? prev : { ...prev, [path]: completed }));
+    } catch {}
+  };
 
 // --- Achievements minimal list ---
             
@@ -816,7 +834,10 @@ function BadgeGrid() {
       setLibFolderVideos(items);
       // light meta enrich
       for (const v of items.slice(0, 24)) {
-        window.api.getMeta(v.path).then(meta => setLibFolderVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p)));
+        window.api.getMeta(v.path).then(async (meta) => {
+          setLibFolderVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p));
+          await recomputeCompletion(v.path, (meta as any)?.duration);
+        });
       }
     } catch {}
   };
@@ -824,7 +845,10 @@ function BadgeGrid() {
   const refreshMeta = (items: VideoItem[] = videos) => {
     // prime first fold
     for (const v of items.slice(0, 24)) {
-      window.api.getMeta(v.path).then(meta => setVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p)));
+      window.api.getMeta(v.path).then(async (meta) => {
+        setVideos(prev => prev.map(p => p.path === v.path ? { ...p, ...meta } : p));
+        await recomputeCompletion(v.path, (meta as any)?.duration);
+      });
     }
     // lazy queue for rest via IntersectionObserver
     setTimeout(() => {
@@ -838,7 +862,10 @@ function BadgeGrid() {
               const p = el.getAttribute('data-path');
               if (!p) continue;
               ioRef.current?.unobserve(el);
-              window.api.getMeta(p).then(meta => setVideos(prev => prev.map(x => x.path === p ? { ...x, ...meta } : x)));
+              window.api.getMeta(p).then(async (meta) => {
+                setVideos(prev => prev.map(x => x.path === p ? { ...x, ...meta } : x));
+                await recomputeCompletion(p, (meta as any)?.duration);
+              });
             }
           }
         }, { rootMargin: '200px 0px' });
@@ -1414,6 +1441,7 @@ function BadgeGrid() {
                            path: vItem.path,
                            lastPositionSec: stats.lastPositionSec,
                          });
+                        recomputeCompletion(vItem.path, vItem.duration, { totalMinutes: stats.totalMinutes, lastPositionSec: stats.lastPositionSec }).catch(()=>{});
                        }, 150);
                      }}
                      onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
@@ -1427,7 +1455,7 @@ function BadgeGrid() {
                       formatDuration(vItem.duration),
                       new Date(vItem.mtime).toLocaleDateString(),
                     ].filter(Boolean).join(' • ')}
-                    watched={!!history[vItem.path]}
+                    watched={!!completedMap[vItem.path]}
                     overlayThumb={vItem.thumb}
                     overlayDetails={[
                       'FILE INFO',
@@ -1503,6 +1531,7 @@ function BadgeGrid() {
                                path: vItem.path,
                                lastPositionSec: stats.lastPositionSec,
                              });
+                            recomputeCompletion(vItem.path, vItem.duration, { totalMinutes: stats.totalMinutes, lastPositionSec: stats.lastPositionSec }).catch(()=>{});
                            }, 150);
                          }}
                          onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
@@ -1516,7 +1545,7 @@ function BadgeGrid() {
                           formatDuration(vItem.duration),
                           new Date(vItem.mtime).toLocaleDateString(),
                         ].filter(Boolean).join(' • ')}
-                        watched={!!history[vItem.path]}
+                        watched={!!completedMap[vItem.path]}
                         overlayThumb={vItem.thumb}
                         overlayDetails={[
                           'FILE INFO',
@@ -1607,7 +1636,7 @@ function BadgeGrid() {
                 formatDuration(v.duration),
                 new Date(v.mtime).toLocaleDateString(),
               ].filter(Boolean).join(' • ')}
-              watched={!!history[v.path]}
+              watched={!!completedMap[v.path]}
               overlayThumb={v.thumb}
               overlayDetails={[
                 'FILE INFO',
@@ -1821,6 +1850,10 @@ function BadgeGrid() {
                   watchTimerRef.current = null;
                   setVideoPaused(true);
                   updateControlsVisibility(true);
+                  try {
+                    const v = e.currentTarget as HTMLVideoElement;
+                    recomputeCompletion(t.path, Number.isFinite(v.duration) ? v.duration : undefined, { totalMinutes: undefined, lastPositionSec: Number.isFinite(v.currentTime) ? v.currentTime : undefined }).catch(()=>{});
+                  } catch {}
                   if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
@@ -1847,6 +1880,10 @@ function BadgeGrid() {
                   watchTimerRef.current = null;
                   setVideoPaused(true);
                   updateControlsVisibility(true);
+                  try {
+                    const v = videoElRef.current;
+                    recomputeCompletion(t.path, v && Number.isFinite(v.duration) ? v.duration : undefined, { totalMinutes: undefined, lastPositionSec: v && Number.isFinite(v.duration) ? v.duration : undefined }).catch(()=>{});
+                  } catch {}
                   if (activeTab === 'ACHIEVEMENTS' && !showEditor) {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
