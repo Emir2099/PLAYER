@@ -998,14 +998,14 @@ function BadgeGrid() {
           </div>
         </div>
       </div>
-  <div className="flex pt-8 min-h-[calc(100vh-2rem)] items-stretch">
+  <div className="flex pt-8 h-[calc(100vh-2rem)] items-stretch overflow-hidden">
         {/* Boot overlay for extra smoothness after splash window */}
         {bootOverlay && (
           <div className="pointer-events-none fixed inset-0 z-40" style={{ background: 'linear-gradient(180deg, rgba(17,24,39,0.85), rgba(17,24,39,0.6))', animation: 'fadeOut 420ms ease forwards' }} />
         )}
         <style>{`@keyframes fadeOut{from{opacity:1}to{opacity:0;visibility:hidden}}`}</style>
       <div
-        className={`hidden md:block border-r border-slate-800 min-h-[calc(100vh-2rem)] overflow-x-visible overflow-y-auto transition-all duration-300 ease-in-out`}
+        className={`hidden md:block border-r border-slate-800 h-full overflow-x-visible overflow-y-auto transition-all duration-300 ease-in-out`}
         style={{ width: sidebarExpanded ? '18rem' : '0rem', padding: sidebarExpanded ? '1rem' : '0rem', willChange: 'width, padding' }}
       >
         <div
@@ -1049,7 +1049,7 @@ function BadgeGrid() {
     </div>
     </div>
 
-  <div className="flex-1 flex flex-col min-w-0 min-h-[calc(100vh-2rem)]">
+  <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
         {/* Top bar / hero */}
         <div className="px-6 pt-4 pb-6 border-b border-slate-800 bg-gradient-to-b from-steam-panel to-transparent">
           <div className="flex items-center gap-3">
