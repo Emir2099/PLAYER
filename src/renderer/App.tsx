@@ -257,20 +257,34 @@ const InlineAchievementEditor: React.FC<{ onClose: ()=>void; existing?: any }> =
   );
 };
 
-const AchievementList: React.FC<{ onEdit: (id: string)=>void; onDelete: (id: string)=>void }> = ({ onEdit, onDelete }) => {
+const AchievementList: React.FC<{
+  onEdit: (id: string)=>void;
+  onDelete: (id: string)=>void;
+  mode: 'completed'|'remaining'|'all';
+  manage?: boolean;
+}> = ({ onEdit, onDelete, mode, manage }) => {
+  const filteredDefs = defs.filter(d => {
+    const st = state[d.id] || {};
+    const unlocked = !!st.unlockedAt;
+    if (mode === 'completed') return unlocked;
+    if (mode === 'remaining') return !unlocked;
+    return true; // all
+  });
   return (
     <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-      {defs.length === 0 && (
-        <div className="text-slate-400 text-sm">No achievements yet. Click Create to add one.</div>
+      {filteredDefs.length === 0 && (
+        <div className="text-slate-400 text-sm">
+          {mode==='completed' ? 'No achievements completed yet.' : mode==='remaining' ? 'Nothing left – all achievements unlocked!' : 'No achievements yet. Use Create to add one.'}
+        </div>
       )}
-      {defs.map((d) => {
+      {filteredDefs.map((d) => {
         const st = state[d.id] || {};
         const unlocked = !!st.unlockedAt;
         const progress = st.progress;
         return (
-          <div key={d.id} className="rounded-lg border border-slate-800 bg-steam-card p-3 group">
+          <div key={d.id} className={`rounded-lg border ${unlocked? 'border-emerald-700/40 bg-gradient-to-br from-emerald-900/30 via-slate-900/40 to-emerald-900/10' : 'border-slate-800 bg-steam-card'} p-3 group`}>            
             <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded bg-slate-800 flex items-center justify-center overflow-hidden">
+              <div className="h-8 w-8 rounded bg-slate-800 flex items-center justify-center overflow-hidden ring-1 ring-slate-700">
                 {d.icon && (/^https?:|^file:|^data:/.test(d.icon)) ? (
                   <img src={d.icon} alt="" className="h-4 w-4 object-cover" />
                 ) : (
@@ -285,9 +299,12 @@ const AchievementList: React.FC<{ onEdit: (id: string)=>void; onDelete: (id: str
                 {d.rarity || 'common'}
               </div>
             </div>
-            <div className="mt-3">
+            <div className="mt-3 min-h-[32px]">
               {unlocked ? (
-                <div className="text-emerald-400 text-sm">Unlocked</div>
+                <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Unlocked
+                </div>
               ) : progress ? (
                 <>
                   <div className="h-2 rounded bg-slate-800 overflow-hidden"><div className="h-full bg-sky-500 transition-all" style={{ width: `${Math.min(100, Math.round((progress.current!/Math.max(1, progress.target!))*100))}%` }} /></div>
@@ -297,10 +314,12 @@ const AchievementList: React.FC<{ onEdit: (id: string)=>void; onDelete: (id: str
                 <div className="text-xs text-slate-500">Progress not available yet</div>
               )}
             </div>
-            <div className="mt-2 flex gap-2 justify-end opacity-80 group-hover:opacity-100 transition-opacity">
-              <button onClick={()=>onEdit(d.id)} className="text-[11px] px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-600 text-slate-200">Edit</button>
-              <button onClick={()=>onDelete(d.id)} className="text-[11px] px-2 py-1 rounded bg-rose-700/40 hover:bg-rose-600/60 text-rose-200">Delete</button>
-            </div>
+            {manage && (
+              <div className="mt-2 flex gap-2 justify-end opacity-80 group-hover:opacity-100 transition-opacity">
+                <button onClick={()=>onEdit(d.id)} className="text-[11px] px-2 py-1 rounded bg-slate-700/50 hover:bg-slate-600 text-slate-200">Edit</button>
+                <button onClick={()=>onDelete(d.id)} className="text-[11px] px-2 py-1 rounded bg-rose-700/40 hover:bg-rose-600/60 text-rose-200">Delete</button>
+              </div>
+            )}
           </div>
         );
       })}
@@ -463,6 +482,7 @@ const AchievementList: React.FC<{ onEdit: (id: string)=>void; onDelete: (id: str
   const [dailyTotals, setDailyTotals] = useState<{ dates: string[]; minutes: number[] }>({ dates: [], minutes: [] });
   const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [achievementView, setAchievementView] = useState<'completed'|'remaining'|'manage'>('completed');
 
   const handleDeleteAchievement = async (id: string) => {
     try {
@@ -1104,21 +1124,73 @@ const AchievementList: React.FC<{ onEdit: (id: string)=>void; onDelete: (id: str
           </div>
         ) : activeTab==='ACHIEVEMENTS' ? (
           <div className="px-8 pb-12 w-full">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div className="text-slate-200 text-xl font-semibold">Achievements</div>
-              {showEditor ? (
-                <button onClick={()=> { setShowEditor(false); setEditingId(null); }} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Close</button>
-              ) : (
-                <button onClick={()=> { setEditingId(null); setShowEditor(true); }} className="px-4 py-2 rounded-md bg-sky-700 hover:bg-sky-600 text-white text-sm">Create</button>
-              )}
+              <div className="flex items-center gap-2 bg-slate-800/60 p-1 rounded-md border border-slate-700">
+                {([
+                  {k:'completed', label:'Completed'},
+                  {k:'remaining', label:'Remaining'},
+                  {k:'manage', label:'Manage'}
+                ] as Array<{k:'completed'|'remaining'|'manage'; label:string}>).map(o => (
+                  <button
+                    key={o.k}
+                    onClick={()=>{ setAchievementView(o.k); if (o.k!=='manage'){ setShowEditor(false); setEditingId(null);} }}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${achievementView===o.k ? 'bg-sky-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-700/70'}`}
+                  >{o.label}</button>
+                ))}
+              </div>
             </div>
-            {showEditor ? (
-              <InlineAchievementEditor
-                existing={editingId ? defs.find(d=>d.id===editingId) : undefined}
-                onClose={()=>{ setShowEditor(false); setEditingId(null); }}
-              />
-            ) : (
+
+            {/* Summary chips (only show when not managing) */}
+            {achievementView!=='manage' && (
+              <div className="mb-6 flex flex-wrap gap-3 text-xs">
+                <div className="px-3 py-2 rounded-md bg-slate-800 border border-slate-700 text-slate-300">Total: {defs.length}</div>
+                <div className="px-3 py-2 rounded-md bg-emerald-900/30 border border-emerald-700/40 text-emerald-300">Completed: {defs.filter(d=>state[d.id]?.unlockedAt).length}</div>
+                <div className="px-3 py-2 rounded-md bg-sky-900/30 border border-sky-700/40 text-sky-300">Remaining: {defs.filter(d=>!state[d.id]?.unlockedAt).length}</div>
+              </div>
+            )}
+
+            {achievementView==='manage' && (
+              <div className="mb-4 flex items-center justify-between">
+                <div className="text-sm text-slate-400">Create, edit or delete achievements below.</div>
+                {showEditor ? (
+                  <button onClick={()=> { setShowEditor(false); setEditingId(null); }} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Close Editor</button>
+                ) : (
+                  <button onClick={()=> { setEditingId(null); setShowEditor(true); }} className="px-4 py-2 rounded-md bg-sky-700 hover:bg-sky-600 text-white text-sm">Create</button>
+                )}
+              </div>
+            )}
+
+            {showEditor && achievementView==='manage' && (
+              <div className="mb-8">
+                <InlineAchievementEditor
+                  existing={editingId ? defs.find(d=>d.id===editingId) : undefined}
+                  onClose={()=>{ setShowEditor(false); setEditingId(null); }}
+                />
+              </div>
+            )}
+
+            {/* Lists */}
+            {achievementView==='completed' && (
               <AchievementList
+                mode="completed"
+                manage={false}
+                onEdit={()=>{}}
+                onDelete={()=>{}}
+              />
+            )}
+            {achievementView==='remaining' && (
+              <AchievementList
+                mode="remaining"
+                manage={false}
+                onEdit={()=>{}}
+                onDelete={()=>{}}
+              />
+            )}
+            {achievementView==='manage' && (
+              <AchievementList
+                mode="all"
+                manage={true}
                 onEdit={(id)=> { setEditingId(id); setShowEditor(true); }}
                 onDelete={handleDeleteAchievement}
               />
