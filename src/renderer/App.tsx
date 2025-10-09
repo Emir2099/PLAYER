@@ -1413,7 +1413,7 @@ const AchievementList: React.FC = () => {
         />
 
       {/* Recently Watched (hidden on INSIGHTS) */}
-      {activeTab !== 'INSIGHTS' && Object.keys(history).length > 0 && (
+      {(activeTab === 'GLOBAL' || activeTab === 'LIBRARY') && Object.keys(history).length > 0 && (
         <div className="px-6 pb-6">
           <div className="text-slate-300 mb-2">Continue watching</div>
           <div className="flex gap-3 overflow-x-auto scrollbar-thin pr-2">
