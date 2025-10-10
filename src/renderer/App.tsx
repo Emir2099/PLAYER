@@ -734,13 +734,14 @@ function BadgeGrid() {
     if (!el) return;
     try { (el as any).setAttribute('controlsList', 'nofullscreen'); } catch {}
     // Reset controls visibility for a new selection
-    try { el.controls = true; setVideoControlsVisible(true); } catch {}
+    try { el.controls = false; setVideoControlsVisible(true); } catch {}
   }, [selected]);
 
   const updateControlsVisibility = (visible: boolean) => {
     setVideoControlsVisible(visible);
+    // Keep native controls disabled; we render our own
     const el = videoElRef.current; if (!el) return;
-    try { el.controls = visible; } catch {}
+    try { el.controls = false; } catch {}
   };
 
   const clearControlsTimer = () => { if (controlsTimerRef.current) { window.clearTimeout(controlsTimerRef.current); controlsTimerRef.current = null; } };
@@ -749,6 +750,37 @@ function BadgeGrid() {
     if (videoPaused) return; // keep visible when paused
     clearControlsTimer();
     controlsTimerRef.current = window.setTimeout(() => { updateControlsVisibility(false); }, delay);
+  };
+  const onSeekBarMouse = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    const el = e.currentTarget; const rect = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const frac = rect.width > 0 ? x / rect.width : 0;
+    const v = videoElRef.current; if (!v) return;
+    if (!Number.isFinite(durationSec) || durationSec <= 0) return;
+    const t = Math.max(0, Math.min(durationSec, frac * durationSec));
+    v.currentTime = t; setCurrentTimeSec(t);
+  };
+  // Custom controls state & helpers
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const [durationSec, setDurationSec] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [seeking, setSeeking] = useState(false);
+  const [seekBarHovering, setSeekBarHovering] = useState(false);
+  const fmt = (s?: number) => formatDuration(typeof s === 'number' && Number.isFinite(s) ? s : undefined) || '0:00';
+  const progressFrac = durationSec > 0 ? Math.min(1, Math.max(0, currentTimeSec / durationSec)) : 0;
+  const bufferedFrac = (()=>{
+    try {
+      const v = videoElRef.current; if (!v || v.buffered.length === 0 || !Number.isFinite(durationSec) || durationSec<=0) return 0;
+      const end = v.buffered.end(v.buffered.length-1);
+      return Math.min(1, Math.max(0, end / durationSec));
+    } catch { return 0; }
+  })();
+  const seekToFrac = (frac: number) => {
+    const v = videoElRef.current; if (!v || !Number.isFinite(durationSec) || durationSec<=0) return;
+    const t = Math.max(0, Math.min(durationSec, frac * durationSec));
+    v.currentTime = t; setCurrentTimeSec(t);
   };
   const ensurePreviewForTime = async (timeSec: number): Promise<string | undefined> => {
     try {
@@ -2144,6 +2176,7 @@ function BadgeGrid() {
                   updateControlsVisibility(true); scheduleHideControls(1600);
                   try {
                     if (!appSettings.enableScrubPreview) return;
+                    if (videoControlsVisible && !seekBarHovering) { setPreviewState(p=>({...p, visible:false })); return; }
                     const wrap = videoWrapRef.current; const dur = videoElRef.current?.duration;
                     if (!wrap || !dur || !Number.isFinite(dur)) return;
                     const r = wrap.getBoundingClientRect();
@@ -2171,7 +2204,7 @@ function BadgeGrid() {
               <video
                 ref={videoElRef}
                 src={fileUrl(selected.path)}
-                controls
+                controls={false}
                 autoPlay
                 className={'player-video w-full max-h-[70vh] object-contain bg-black'}
                 onDoubleClick={async (e) => {
@@ -2192,11 +2225,13 @@ function BadgeGrid() {
                   updateControlsVisibility(true);
                   scheduleHideControls(1600);
                   refreshHistory();
+                  const v = videoElRef.current; if (v) { setDurationSec(Number.isFinite(v.duration) ? v.duration : 0); setVolume(v.volume); setMuted(v.muted); setPlaybackRate(v.playbackRate); }
                 }}
                 onTimeUpdate={(e) => {
                   try {
                     const v = e.currentTarget as HTMLVideoElement;
                     if (!v || !Number.isFinite(v.currentTime)) return;
+                    setCurrentTimeSec(v.currentTime);
                     const now = Date.now();
                     // Save playback position every 5s (monotonic)
                     if (now - posSaveTickRef.current > 5000) {
@@ -2241,6 +2276,8 @@ function BadgeGrid() {
                     window.api.getAchievementState().then(s=> setState(s)).catch(()=>{});
                   }
                   refreshHistory();
+                  setVideoPaused(true);
+                  updateControlsVisibility(true);
                 }}
                 onEnded={() => {
                   flushPlaybackProgress('ended');
@@ -2250,8 +2287,92 @@ function BadgeGrid() {
                   refreshHistory();
                 }}
               />
+              {/* Custom Controls Bar */}
+              <div
+                className={`absolute left-0 right-0 bottom-0 z-[55] transition-opacity ${videoControlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                onMouseMove={() => { updateControlsVisibility(true); scheduleHideControls(1600); }}
+              >
+                <div className="px-3 pt-8 pb-3 bg-gradient-to-t from-black/80 to-black/0">
+                  {/* Seek bar */}
+                  <div
+                    className="relative h-3 cursor-pointer group"
+                    onMouseEnter={()=>{ setSeekBarHovering(true); }}
+                    onMouseDown={(e)=>{ setSeeking(true); onSeekBarMouse(e as any); }}
+                    onMouseMove={async (e)=>{
+                      if (seeking) onSeekBarMouse(e as any);
+                      try {
+                        if (!appSettings.enableScrubPreview) return;
+                        const bar = e.currentTarget as HTMLDivElement;
+                        const wrap = videoWrapRef.current;
+                        const vdur = durationSec;
+                        if (!wrap || !Number.isFinite(vdur) || vdur<=0) return;
+                        const barRect = bar.getBoundingClientRect();
+                        const wrapRect = wrap.getBoundingClientRect();
+                        const localX = Math.max(0, Math.min(barRect.width, e.clientX - barRect.left));
+                        const frac = barRect.width > 0 ? localX / barRect.width : 0;
+                        const t = frac * vdur;
+                        const bin = Math.floor(t / PREVIEW_STEP_SEC) * PREVIEW_STEP_SEC;
+                        const xInWrap = (barRect.left - wrapRect.left) + localX;
+                        if (lastPreviewBinRef.current !== bin) {
+                          lastPreviewBinRef.current = bin;
+                          setPreviewState(p => ({ ...p, visible: true, x: xInWrap, timeSec: t, loading: true }));
+                          const url = await ensurePreviewForTime(t);
+                          if (url) setPreviewState(p => ({ ...p, visible: true, x: xInWrap, timeSec: t, url, loading: false }));
+                          else setPreviewState(p=> ({...p, visible:true, x: xInWrap, timeSec:t, loading:false }));
+                        } else {
+                          setPreviewState(p => ({ ...p, visible: true, x: xInWrap, timeSec: t }));
+                        }
+                      } catch {}
+                    }}
+                    onMouseUp={()=>{ setSeeking(false); }}
+                    onMouseLeave={()=>{ setSeeking(false); setSeekBarHovering(false); if (!seeking) setPreviewState(p=>({...p, visible:false })); }}
+                    onClick={(e)=> onSeekBarMouse(e as any)}
+                    onDoubleClick={(e)=> e.stopPropagation()}
+                  >
+                    <div className="absolute inset-y-1 left-0 right-0 rounded bg-slate-700/60" />
+                    <div className="absolute inset-y-1 left-0 rounded bg-slate-400/60" style={{ width: `${bufferedFrac*100}%` }} />
+                    <div className="absolute inset-y-0 left-0 flex items-center" style={{ width: `${progressFrac*100}%` }}>
+                      <div className="h-3 rounded bg-sky-400" style={{ width: '100%' }} />
+                      <div className="h-4 w-4 -ml-2 rounded-full bg-white shadow group-hover:scale-110 transform transition" />
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-3 text-sm text-slate-200">
+                    {/* Play/Pause */}
+                    <button
+                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700"
+                      onClick={() => {
+                        const v = videoElRef.current; if (!v) return;
+                        if (v.paused) { v.play(); setVideoPaused(false); } else { v.pause(); setVideoPaused(true); }
+                        updateControlsVisibility(true); scheduleHideControls(1600);
+                      }}
+                    >{videoPaused ? 'Play' : 'Pause'}</button>
+                    {/* Time */}
+                    <div className="min-w-[88px] text-xs text-slate-300">{fmt(currentTimeSec)} / {fmt(durationSec)}</div>
+                    {/* Volume */}
+                    <button className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={()=>{ const v = videoElRef.current; if (!v) return; v.muted = !v.muted; setMuted(v.muted); }}>
+                      {muted || volume===0 ? 'Unmute' : 'Mute'}
+                    </button>
+                    <input type="range" min={0} max={1} step={0.01} value={muted?0:volume}
+                      onChange={(e)=>{ const v = videoElRef.current; if (!v) return; const val = parseFloat((e.target as HTMLInputElement).value); v.volume = val; v.muted = val===0; setVolume(val); setMuted(v.muted); }}
+                      className="w-28 accent-sky-400"
+                    />
+                    {/* Speed */}
+                    <div className="ml-auto flex items-center gap-2">
+                      <button className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={()=>{ const v = videoElRef.current; if (!v) return; const r = Math.max(0.25, Math.round((v.playbackRate-0.25)*100)/100); v.playbackRate = r; setPlaybackRate(r); }}>-</button>
+                      <div className="w-14 text-center text-xs">{playbackRate.toFixed(2)}x</div>
+                      <button className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={()=>{ const v = videoElRef.current; if (!v) return; const r = Math.min(4, Math.round((v.playbackRate+0.25)*100)/100); v.playbackRate = r; setPlaybackRate(r); }}>+</button>
+                      <button className="ml-3 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={async ()=>{
+                        try {
+                          if (!playerFullscreen && videoWrapRef.current) { await videoWrapRef.current.requestFullscreen(); }
+                          else if (document.fullscreenElement) { await document.exitFullscreen(); }
+                        } catch {}
+                      }}>{playerFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
               {/* Scrub preview overlay */}
-              {previewState.visible && appSettings.enableHoverPreviews && (
+              {previewState.visible && appSettings.enableHoverPreviews && (seekBarHovering || !videoControlsVisible) && (
                 <div
                   className="pointer-events-none absolute z-[60]"
                   style={{ left: Math.round(previewState.x), bottom: PREVIEW_BAND_PX + 8, transform: 'translateX(-50%)' }}
