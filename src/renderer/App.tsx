@@ -258,6 +258,7 @@ const Library: React.FC = () => {
   const [folderCovers, setFolderCovers] = useState<Record<string, string>>({});
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [itemMenu, setItemMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const [playerMenu, setPlayerMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<VideoItem | null>(null);
   const [history, setHistory] = useState<Record<string, number>>({});
@@ -535,6 +536,11 @@ function BadgeGrid() {
           setSidebarExpanded(open);
           setSidebarContentVisible(open);
         }
+        // Load any persisted manual overrides
+        const overrides = (prefs as any).completionOverrides;
+        if (overrides && typeof overrides === 'object') {
+          setCompletionOverride(overrides as Record<string, 'watched'|'unwatched'>);
+        }
       } catch {}
       const hist = await window.api.getHistory();
       setHistory(hist);
@@ -752,17 +758,18 @@ function BadgeGrid() {
       try { setDefs(await window.api.getAchievements()); } catch {}
       try { setState(await window.api.getAchievementState()); } catch {}
       if (editingId === id) { setEditingId(null); setShowEditor(false); }
+      try { show('Marked as unwatched', { type: 'info' as any }); } catch {}
     } catch {}
   };
 
   // Listen for achievement unlocks and show a small toast (Steam-like bottom-right)
   useEffect(() => {
-  const off = window.api.onAchievementUnlocked?.((payload: { name: string; icon?: string; rarity?: string }) => {
+    const off = window.api.onAchievementUnlocked?.((payload: { name: string; icon?: string; rarity?: string }) => {
       // If the unlocked achievement has a badge defined, prefer its icon in toast
       let toastIcon = payload.icon;
       try {
-  const match: any = defs.find(d=>d.name===payload.name);
-  if (match?.badge?.icon) toastIcon = match.badge.icon;
+        const match: any = defs.find(d=>d.name===payload.name);
+        if (match?.badge?.icon) toastIcon = match.badge.icon;
       } catch {}
       const rareType = payload.rarity === 'legendary' ? 'warning' : 'success';
       try { show(`Achievement Unlocked — ${payload.name}`, { type: rareType as any, icon: toastIcon, rarity: payload.rarity as any }); } catch {}
@@ -773,6 +780,11 @@ function BadgeGrid() {
     });
     return () => { try { off?.(); } catch {} };
   }, [showEditor, defs, achievementView]);
+
+  // Persist manual overrides in UI prefs to survive restarts
+  useEffect(() => {
+    try { (window.api.setUiPrefs as any)({ completionOverrides: completionOverride }); } catch {}
+  }, [completionOverride]);
 
   const buildInsights = async (historySnapshot?: Record<string, number>) => {
     try {
@@ -1961,6 +1973,10 @@ function BadgeGrid() {
               <div className="font-semibold text-slate-100 truncate pr-4">{selected.name}</div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={(e)=>{ const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); setPlayerMenu({ x: rect.left, y: rect.bottom + 4, path: selected.path }); }}
+                  className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700"
+                >More</button>
+                <button
                   onClick={async () => {
                     try {
                       if (!playerFullscreen && videoWrapRef.current) {
@@ -2068,6 +2084,19 @@ function BadgeGrid() {
             </div>
           </div>
         </div>
+      )}
+
+      {playerMenu && (
+        <ContextMenu
+          x={playerMenu.x}
+          y={playerMenu.y}
+          onClose={() => setPlayerMenu(null)}
+          items={[
+            { label: 'Mark as watched', onClick: async () => { await markAsWatched(playerMenu.path); setPlayerMenu(null); } },
+            { label: 'Mark as unwatched', onClick: async () => { await markAsUnwatched(playerMenu.path); setPlayerMenu(null); } },
+            { label: 'Reset progress', onClick: async () => { await resetProgress(playerMenu.path); setPlayerMenu(null); } },
+          ]}
+        />
       )}
 
       <SettingsModal
