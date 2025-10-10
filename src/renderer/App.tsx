@@ -267,9 +267,9 @@ const Library: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const gridRef = useRef<HTMLDivElement | null>(null);
   const ioRef = useRef<IntersectionObserver | null>(null);
-  const { show } = useToast();
+  const { show, update, close } = useToast();
   const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[]; path?: string; lastPositionSec?: number } | null>(null);
-  const [appSettings, setAppSettings] = useState<{ enableHoverPreviews: boolean; enableScrubPreview?: boolean }>({ enableHoverPreviews: true, enableScrubPreview: true });
+  const [appSettings, setAppSettings] = useState<{ enableHoverPreviews: boolean; enableScrubPreview?: boolean; enableAutoplayNext?: boolean; autoplayCountdownSec?: number }>({ enableHoverPreviews: true, enableScrubPreview: true, enableAutoplayNext: true, autoplayCountdownSec: 5 });
   
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -548,7 +548,7 @@ function BadgeGrid() {
       try { buildInsights(hist); } catch {}
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
       try { setCategoryCovers(await window.api.getCategoryCovers()); } catch {}
-  try { const s = await window.api.getAppSettings(); setAppSettings({ enableHoverPreviews: !!s.enableHoverPreviews, enableScrubPreview: s.enableScrubPreview !== false }); } catch {}
+  try { const s = await window.api.getAppSettings(); setAppSettings({ enableHoverPreviews: !!s.enableHoverPreviews, enableScrubPreview: s.enableScrubPreview !== false, enableAutoplayNext: s.enableAutoplayNext !== false, autoplayCountdownSec: (typeof s.autoplayCountdownSec==='number' ? Math.min(10, Math.max(3, Math.round(s.autoplayCountdownSec))) : 5) }); } catch {}
       await navigateTo(base);
       // After initial data is ready, fade out boot overlay
       setTimeout(() => setBootOverlay(false), 300);
@@ -829,6 +829,61 @@ function BadgeGrid() {
       updateControlsVisibility(true);
       try { recomputeCompletion(t.path, v && Number.isFinite(v.duration) ? v.duration : undefined, { totalMinutes: undefined, lastPositionSec: v && Number.isFinite(v.currentTime) ? v.currentTime : undefined }).catch(()=>{}); } catch {}
       refreshHistory();
+      // If ended, consider Next Up autoplay
+  if (reason === 'ended' && appSettings.enableAutoplayNext !== false) {
+        try {
+          // Determine context list (category folder videos, category items videos, or filtered list)
+          const currentPath = t.path;
+          const currentList: VideoItem[] = (() => {
+            if (activeTab === 'LIBRARY') {
+              if (libFolderPath) return libFolderVideos;
+              if (selectedCategoryId) {
+                const vids: VideoItem[] = [];
+                for (const it of categoryItems) {
+                  if (it.type === 'video') {
+                    const v = videos.find(x=>x.path===it.path) || categoryVideoMap[it.path];
+                    if (v) vids.push(v);
+                  }
+                }
+                return vids;
+              }
+            }
+            return filtered;
+          })();
+          const idx = currentList.findIndex(v => v.path === currentPath);
+          if (idx >= 0 && idx < currentList.length - 1) {
+            const next = currentList[idx + 1];
+            // Countdown toast with cancel and Play now action
+            let cancelled = false;
+            let remaining = (typeof appSettings.autoplayCountdownSec === 'number' ? Math.min(10, Math.max(3, Math.round(appSettings.autoplayCountdownSec))) : 5);
+            const playNow = () => {
+              if (cancelled) return;
+              cancelled = true;
+              try { close?.(toastId); } catch {}
+              setSelected(next);
+            };
+            const onCancel = () => { cancelled = true; try { close?.(toastId); } catch {} };
+            const toastId = show(`Next up: ${next.name} in ${remaining}s`, {
+              type: 'info',
+              timeout: 6000,
+              actions: [
+                { label: 'Play now', onClick: playNow, primary: true },
+                { label: 'Cancel', onClick: onCancel }
+              ],
+              onClick: onCancel,
+              loading: true,
+            }) as unknown as number;
+            const timer = window.setInterval(() => {
+              remaining -= 1;
+              update?.(toastId, { message: `Next up: ${next.name} in ${Math.max(0, remaining)}s` } as any);
+              if (remaining <= 0) {
+                window.clearInterval(timer);
+                if (!cancelled) playNow();
+              }
+            }, 1000);
+          }
+        } catch {}
+      }
     } catch {}
   };
 
@@ -2235,7 +2290,18 @@ function BadgeGrid() {
       <SettingsModal
         open={showSettings}
         onClose={() => setShowSettings(false)}
-        onSaved={() => refreshMeta()}
+        onSaved={async () => {
+          try {
+            const s = await window.api.getAppSettings();
+            setAppSettings({
+              enableHoverPreviews: !!s.enableHoverPreviews,
+              enableScrubPreview: s.enableScrubPreview !== false,
+              enableAutoplayNext: s.enableAutoplayNext !== false,
+              autoplayCountdownSec: (typeof s.autoplayCountdownSec==='number' ? Math.min(10, Math.max(3, Math.round(s.autoplayCountdownSec))) : 5)
+            });
+          } catch {}
+          refreshMeta();
+        }}
       />
       </div>
     </div>

@@ -13,9 +13,11 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const [enableHoverPreviews, setEnableHoverPreviews] = useState<boolean>(true);
   const [enableScrubPreview, setEnableScrubPreview] = useState<boolean>(true);
   const [enableAchievementChime, setEnableAchievementChime] = useState<boolean>(true);
+  const [enableAutoplayNext, setEnableAutoplayNext] = useState<boolean>(true);
+  const [autoplayCountdownSec, setAutoplayCountdownSec] = useState<number>(5);
 
   // Minimal runtime-safe typing for extended settings
-  type AppSettings = { enableHoverPreviews?: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean };
+  type AppSettings = { enableHoverPreviews?: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean; enableAutoplayNext?: boolean; autoplayCountdownSec?: number };
 
   useEffect(() => {
     if (!open) return;
@@ -24,10 +26,12 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
       setFfmpegPath(curr.ffmpegPath || '');
       setFfprobePath(curr.ffprobePath || '');
       try {
-        const s: AppSettings = await window.api.getAppSettings();
+    const s: AppSettings = await window.api.getAppSettings();
         setEnableHoverPreviews(!!s.enableHoverPreviews);
         if (typeof s.enableScrubPreview === 'boolean') setEnableScrubPreview(!!s.enableScrubPreview); else setEnableScrubPreview(true);
-        if (typeof s.enableAchievementChime === 'boolean') setEnableAchievementChime(!!s.enableAchievementChime);
+  if (typeof s.enableAchievementChime === 'boolean') setEnableAchievementChime(!!s.enableAchievementChime);
+  if (typeof s.enableAutoplayNext === 'boolean') setEnableAutoplayNext(!!s.enableAutoplayNext); else setEnableAutoplayNext(true);
+  if (typeof s.autoplayCountdownSec === 'number') setAutoplayCountdownSec(Math.min(10, Math.max(3, Math.round(s.autoplayCountdownSec)))); else setAutoplayCountdownSec(5);
       } catch {}
     })();
   }, [open]);
@@ -43,7 +47,7 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
     setSaving(true);
     try {
     await window.api.setFFPaths({ ffmpegPath: ffmpegPath || undefined, ffprobePath: ffprobePath || undefined });
-    await window.api.setAppSettings({ enableHoverPreviews, enableScrubPreview, enableAchievementChime } as any);
+  await window.api.setAppSettings({ enableHoverPreviews, enableScrubPreview, enableAchievementChime, enableAutoplayNext, autoplayCountdownSec } as any);
       onSaved?.();
       onClose();
     } finally {
@@ -80,6 +84,31 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
               <span className="text-sm text-slate-200">Enable scrub preview thumbnails</span>
             </label>
             <div className="text-xs text-slate-400 mt-1">Show a small thumbnail when hovering the progress bar area.</div>
+          </div>
+          <div>
+            <label className="inline-flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={enableAutoplayNext}
+                onChange={e => setEnableAutoplayNext(e.target.checked)}
+                className="accent-steam-accent"
+              />
+              <span className="text-sm text-slate-200">Enable autoplay next</span>
+            </label>
+            <div className="text-xs text-slate-400 mt-1">After a video ends, start the next item automatically with a short cancelable countdown.</div>
+            {enableAutoplayNext && (
+              <div className="mt-3 flex items-center gap-3">
+                <label className="text-xs text-slate-400">Countdown seconds</label>
+                <input
+                  type="range"
+                  min={3}
+                  max={10}
+                  value={autoplayCountdownSec}
+                  onChange={e => setAutoplayCountdownSec(Math.min(10, Math.max(3, parseInt(e.target.value||'5',10))))}
+                />
+                <div className="text-xs text-slate-300 w-8 text-right">{autoplayCountdownSec}s</div>
+              </div>
+            )}
           </div>
           <div>
             <label className="inline-flex items-center gap-3 cursor-pointer select-none">

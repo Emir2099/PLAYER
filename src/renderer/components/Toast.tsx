@@ -1,10 +1,13 @@
 import React, { createContext, useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-export type ToastItem = { id: number; type?: 'info' | 'success' | 'error' | 'warning'; message: string; timeout?: number; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; closing?: boolean };
+export type ToastAction = { label: string; onClick?: () => void; primary?: boolean };
+export type ToastItem = { id: number; type?: 'info' | 'success' | 'error' | 'warning'; message: string; timeout?: number; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; closing?: boolean; onClick?: () => void; actions?: ToastAction[]; loading?: boolean };
 
 type ToastCtx = {
-  show: (message: string, opts?: { type?: ToastItem['type']; timeout?: number; icon?: string; rarity?: ToastItem['rarity'] }) => void;
+  show: (message: string, opts?: { type?: ToastItem['type']; timeout?: number; icon?: string; rarity?: ToastItem['rarity']; onClick?: () => void; actions?: ToastAction[]; loading?: boolean }) => number;
+  update: (id: number, patch: Partial<Pick<ToastItem, 'message' | 'type' | 'icon' | 'rarity' | 'onClick' | 'actions' | 'loading'>>) => void;
+  close: (id: number) => void;
 };
 
 const Ctx = createContext<ToastCtx | null>(null);
@@ -34,9 +37,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       document.removeEventListener('webkitfullscreenchange', update as any);
     };
   }, []);
-  const show = useCallback((message: string, opts?: { type?: ToastItem['type']; timeout?: number; icon?: string; rarity?: ToastItem['rarity'] }) => {
+  const show = useCallback((message: string, opts?: { type?: ToastItem['type']; timeout?: number; icon?: string; rarity?: ToastItem['rarity']; onClick?: () => void; actions?: ToastAction[]; loading?: boolean }) => {
     const id = Date.now() + Math.random();
-    const entry: ToastItem = { id, message, type: opts?.type ?? 'info', timeout: opts?.timeout ?? 3500, icon: opts?.icon, rarity: opts?.rarity, closing: false };
+    const entry: ToastItem = { id, message, type: opts?.type ?? 'info', timeout: opts?.timeout ?? 3500, icon: opts?.icon, rarity: opts?.rarity, closing: false, onClick: opts?.onClick, actions: opts?.actions, loading: !!opts?.loading };
     setItems((prev) => [...prev, entry]);
     if (entry.timeout && entry.timeout > 0) {
       setTimeout(() => {
@@ -45,9 +48,19 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 260);
       }, entry.timeout);
     }
+    return id;
   }, []);
 
-  const value = useMemo(() => ({ show }), [show]);
+  const update = useCallback((id: number, patch: Partial<Pick<ToastItem, 'message' | 'type' | 'icon' | 'rarity' | 'onClick' | 'actions' | 'loading'>>) => {
+    setItems(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t));
+  }, []);
+
+  const close = useCallback((id: number) => {
+    setItems(prev => prev.map(t => t.id === id ? { ...t, closing: true } : t));
+    setTimeout(() => setItems(prev => prev.filter(t => t.id !== id)), 220);
+  }, []);
+
+  const value = useMemo(() => ({ show, update, close }), [show, update, close]);
 
   const layer = (
     <>
@@ -70,7 +83,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             t.type === 'warning' ? 'border-yellow-500/40 text-yellow-200' : 'border-sky-500/40 text-slate-200',
           ].join(' ')}
           onClick={() => {
-            // allow manual dismissal by click
+            // allow manual dismissal by click and trigger callback
+            try { t.onClick?.(); } catch {}
             setItems((prev) => prev.map((x) => (x.id === t.id ? { ...x, closing: true } : x)));
             setTimeout(() => setItems((prev) => prev.filter((x) => x.id !== t.id)), 220);
           }}
@@ -90,6 +104,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 <img src={t.icon} alt="icon" className="h-full w-full object-cover" />
               </div>
             )}
+            {t.loading && (
+              <div className="h-4 w-4 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" aria-hidden="true" />
+            )}
             <span className="leading-snug">
               {t.message}
               {t.rarity && (
@@ -98,6 +115,22 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 </div>
               )}
             </span>
+            {t.actions && t.actions.length > 0 && (
+              <div className="ml-auto flex items-center gap-2">
+                {t.actions.map((a, idx) => (
+                  <button
+                    key={idx}
+                    className={[
+                      'px-2 py-1 rounded text-xs',
+                      a.primary ? 'bg-emerald-700 hover:bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200',
+                    ].join(' ')}
+                    onClick={(e) => { e.stopPropagation(); try { a.onClick?.(); } catch {} }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ))}
