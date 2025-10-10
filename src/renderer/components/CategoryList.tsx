@@ -94,6 +94,40 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
     } catch {}
   };
 
+  // Autoscroll while dragging: when dragging over the list, hovering near top/bottom scrolls it
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const dragHoverY = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const EDGE = 48; // px from top/bottom to trigger autoscroll
+  const MAX_SPEED = 18; // px per frame at the very edge
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    let running = true;
+    const tick = () => {
+      if (!running) return;
+      const y = dragHoverY.current;
+      if (y != null) {
+        const rect = el.getBoundingClientRect();
+        let dy = 0;
+        if (y < rect.top + EDGE) {
+          const t = Math.max(0, EDGE - (y - rect.top));
+          dy = -Math.min(MAX_SPEED, (t / EDGE) * MAX_SPEED);
+        } else if (y > rect.bottom - EDGE) {
+          const t = Math.max(0, EDGE - (rect.bottom - y));
+          dy = Math.min(MAX_SPEED, (t / EDGE) * MAX_SPEED);
+        }
+        if (dy !== 0) {
+          el.scrollTop = Math.max(0, Math.min(el.scrollHeight, el.scrollTop + dy));
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { running = false; if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between text-xs text-slate-400">
@@ -120,7 +154,13 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
           <button className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700" onClick={create}>Add</button>
         </div>
       )}
-      <div className="flex flex-col gap-1">
+      <div
+        ref={listRef}
+        className="flex flex-col gap-1 overflow-auto max-h-[60vh]"
+        onDragOver={(e)=>{ dragHoverY.current = e.clientY; }}
+        onDragLeave={()=>{ dragHoverY.current = null; }}
+        onDrop={()=>{ dragHoverY.current = null; }}
+      >
         {cats.map(c => (
           <div key={c.id}
                className={`px-2 py-1 rounded cursor-pointer ${active===c.id? 'bg-slate-800 text-white':'hover:bg-slate-800/60'}`}
