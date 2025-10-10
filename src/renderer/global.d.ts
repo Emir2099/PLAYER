@@ -31,8 +31,8 @@ declare interface Window {
     getWatchStats: (filePath: string) => Promise<{ lastWatched: number; totalMinutes: number; last14Minutes?: number; lastPositionSec?: number }>;
     setLastPosition: (filePath: string, seconds: number) => Promise<boolean>;
   getDailyTotals: (days?: number) => Promise<{ dates: string[]; seconds: number[] }>;
-    getAppSettings: () => Promise<{ enableHoverPreviews: boolean }>;
-    setAppSettings: (v: { enableHoverPreviews?: boolean }) => Promise<boolean>;
+  getAppSettings: () => Promise<{ enableHoverPreviews: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean }>;
+  setAppSettings: (v: { enableHoverPreviews?: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean }) => Promise<boolean>;
   // Achievements
   getAchievements: () => Promise<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: any[]; notify?: boolean }>>;
   setAchievements: (defs: Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: any[]; notify?: boolean }>) => Promise<boolean>;

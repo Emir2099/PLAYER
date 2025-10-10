@@ -269,7 +269,7 @@ const Library: React.FC = () => {
   const ioRef = useRef<IntersectionObserver | null>(null);
   const { show } = useToast();
   const [hoverPayload, setHoverPayload] = useState<{ title: string; thumb?: string | null; lines: string[]; path?: string; lastPositionSec?: number } | null>(null);
-  const [appSettings, setAppSettings] = useState<{ enableHoverPreviews: boolean }>({ enableHoverPreviews: true });
+  const [appSettings, setAppSettings] = useState<{ enableHoverPreviews: boolean; enableScrubPreview?: boolean }>({ enableHoverPreviews: true, enableScrubPreview: true });
   
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({});
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -548,7 +548,7 @@ function BadgeGrid() {
       try { buildInsights(hist); } catch {}
       try { setFolderCovers(await window.api.getFolderCovers()); } catch {}
       try { setCategoryCovers(await window.api.getCategoryCovers()); } catch {}
-      try { setAppSettings(await window.api.getAppSettings()); } catch {}
+  try { const s = await window.api.getAppSettings(); setAppSettings({ enableHoverPreviews: !!s.enableHoverPreviews, enableScrubPreview: s.enableScrubPreview !== false }); } catch {}
       await navigateTo(base);
       // After initial data is ready, fade out boot overlay
       setTimeout(() => setBootOverlay(false), 300);
@@ -685,6 +685,18 @@ function BadgeGrid() {
   const [videoControlsVisible, setVideoControlsVisible] = useState(true);
   const [videoPaused, setVideoPaused] = useState(false);
   const controlsTimerRef = useRef<number | null>(null);
+
+  // Scrub preview thumbnail (hover over progress area)
+  const PREVIEW_STEP_SEC = 2; // quantize requests to reduce seeks
+  const PREVIEW_WIDTH = 220; // px
+  const PREVIEW_BAND_PX = 90; // only show when mouse is within this many px from bottom of player area
+  const [previewState, setPreviewState] = useState<{ visible: boolean; x: number; timeSec: number; url?: string; loading: boolean }>({ visible: false, x: 0, timeSec: 0, url: undefined, loading: false });
+  const previewVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const previewCanvasElRef = useRef<HTMLCanvasElement | null>(null);
+  const previewCacheRef = useRef<Map<number, string>>(new Map());
+  const previewSrcRef = useRef<string | null>(null);
+  const previewSeekBusyRef = useRef<boolean>(false);
+  const lastPreviewBinRef = useRef<number | null>(null);
   useEffect(() => {
     const onFs = () => {
       const isFs = !!(document.fullscreenElement && videoWrapRef.current && document.fullscreenElement === videoWrapRef.current);
@@ -693,6 +705,15 @@ function BadgeGrid() {
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
+  // Reset scrub preview cache when selection changes
+  useEffect(() => {
+    previewCacheRef.current.clear();
+    lastPreviewBinRef.current = null;
+    const v = previewVideoElRef.current;
+    if (v) { try { v.src = ''; } catch {} }
+    previewSrcRef.current = null;
+    setPreviewState(p => ({ ...p, visible: false, url: undefined }));
+  }, [selected?.path]);
   // Ensure native fullscreen button is disabled on the video element
   useEffect(() => {
     const el = videoElRef.current;
@@ -714,6 +735,54 @@ function BadgeGrid() {
     if (videoPaused) return; // keep visible when paused
     clearControlsTimer();
     controlsTimerRef.current = window.setTimeout(() => { updateControlsVisibility(false); }, delay);
+  };
+  const ensurePreviewForTime = async (timeSec: number): Promise<string | undefined> => {
+    try {
+      const sel = selected; const vdur = videoElRef.current?.duration;
+      if (!sel || !vdur || !Number.isFinite(vdur)) return undefined;
+      const src = fileUrl(sel.path);
+      const bin = Math.max(0, Math.min(vdur - 0.01, Math.floor(timeSec / PREVIEW_STEP_SEC) * PREVIEW_STEP_SEC));
+      const cached = previewCacheRef.current.get(bin);
+      if (cached) return cached;
+      if (previewSeekBusyRef.current) return undefined;
+      previewSeekBusyRef.current = true;
+      let pv = previewVideoElRef.current;
+      if (!pv) {
+        pv = document.createElement('video');
+        pv.muted = true; pv.preload = 'auto'; pv.crossOrigin = 'anonymous';
+        previewVideoElRef.current = pv;
+      }
+      if (previewSrcRef.current !== src) {
+        pv.src = src; previewSrcRef.current = src;
+        await new Promise<void>((res) => {
+          const onMeta = () => { pv?.removeEventListener('loadedmetadata', onMeta); res(); };
+          pv.addEventListener('loadedmetadata', onMeta);
+        });
+      }
+      // Seek to bin
+      await new Promise<void>((res) => {
+        const onSeeked = () => { pv?.removeEventListener('seeked', onSeeked); res(); };
+        pv.currentTime = bin;
+        pv.addEventListener('seeked', onSeeked);
+      });
+      // Draw frame
+      let canvas = previewCanvasElRef.current;
+      if (!canvas) { canvas = document.createElement('canvas'); previewCanvasElRef.current = canvas; }
+      const vw = pv.videoWidth || 320; const vh = pv.videoHeight || 180;
+      const targetW = PREVIEW_WIDTH; const targetH = Math.max(1, Math.round((vh / vw) * targetW));
+      canvas.width = targetW; canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(pv, 0, 0, targetW, targetH);
+        const url = canvas.toDataURL('image/jpeg', 0.75);
+        previewCacheRef.current.set(bin, url);
+        return url;
+      }
+    } catch {}
+    finally {
+      previewSeekBusyRef.current = false;
+    }
+    return undefined;
   };
   const refreshHistory = async () => {
     try { const h = await window.api.getHistory(); setHistory(h || {}); } catch {}
@@ -1995,8 +2064,33 @@ function BadgeGrid() {
               <div
                 ref={videoWrapRef}
                 className={`relative player-fs-root ${playerFullscreen ? 'player-fs-active' : ''} ${playerFullscreen && !videoControlsVisible ? 'hide-cursor' : ''}`}
-                onMouseMove={() => { updateControlsVisibility(true); scheduleHideControls(1600); }}
-                onMouseLeave={() => { if (!videoPaused) updateControlsVisibility(false); }}
+                onMouseMove={async (e) => {
+                  updateControlsVisibility(true); scheduleHideControls(1600);
+                  try {
+                    if (!appSettings.enableScrubPreview) return;
+                    const wrap = videoWrapRef.current; const dur = videoElRef.current?.duration;
+                    if (!wrap || !dur || !Number.isFinite(dur)) return;
+                    const r = wrap.getBoundingClientRect();
+                    const x = e.clientX - r.left; const y = e.clientY - r.top;
+                    if (y < 0 || x < 0 || x > r.width || y > r.height) { setPreviewState(p=>({...p, visible:false})); return; }
+                    const nearBottom = (r.height - y) <= PREVIEW_BAND_PX;
+                    if (!nearBottom) { setPreviewState(p=>({...p, visible:false})); return; }
+                    const frac = Math.max(0, Math.min(1, x / Math.max(1, r.width)));
+                    const t = frac * dur;
+                    const bin = Math.floor(t / PREVIEW_STEP_SEC) * PREVIEW_STEP_SEC;
+                    if (lastPreviewBinRef.current !== bin) {
+                      lastPreviewBinRef.current = bin;
+                      // request image (async); optimistic show loading
+                      setPreviewState(p => ({ ...p, visible: true, x, timeSec: t, loading: true }));
+                      const url = await ensurePreviewForTime(t);
+                      if (url) setPreviewState(p => ({ ...p, visible: true, x, timeSec: t, url, loading: false }));
+                      else setPreviewState(p=> ({...p, visible:true, x, timeSec:t, loading:false }));
+                    } else {
+                      setPreviewState(p => ({ ...p, visible: true, x, timeSec: t }));
+                    }
+                  } catch {}
+                }}
+                onMouseLeave={() => { if (!videoPaused) updateControlsVisibility(false); setPreviewState(p=>({...p, visible:false})); }}
               >
               <video
                 ref={videoElRef}
@@ -2080,6 +2174,24 @@ function BadgeGrid() {
                   refreshHistory();
                 }}
               />
+              {/* Scrub preview overlay */}
+              {previewState.visible && appSettings.enableHoverPreviews && (
+                <div
+                  className="pointer-events-none absolute z-[60]"
+                  style={{ left: Math.round(previewState.x), bottom: PREVIEW_BAND_PX + 8, transform: 'translateX(-50%)' }}
+                >
+                  <div className="rounded-md overflow-hidden border border-slate-700 shadow-lg bg-black/80">
+                    {previewState.url ? (
+                      <img src={previewState.url} alt="preview" style={{ width: PREVIEW_WIDTH, height: 'auto', display: 'block' }} />
+                    ) : (
+                      <div style={{ width: PREVIEW_WIDTH, height: Math.round((PREVIEW_WIDTH*9)/16) }} className="bg-slate-900/70" />
+                    )}
+                    <div className="px-2 py-1 text-[11px] text-slate-200 bg-black/70 border-t border-slate-700/70">
+                      {formatDuration(previewState.timeSec) || '0:00'}
+                    </div>
+                  </div>
+                </div>
+              )}
               </div>
             </div>
           </div>

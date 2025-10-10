@@ -11,10 +11,11 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const [ffprobePath, setFfprobePath] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [enableHoverPreviews, setEnableHoverPreviews] = useState<boolean>(true);
+  const [enableScrubPreview, setEnableScrubPreview] = useState<boolean>(true);
   const [enableAchievementChime, setEnableAchievementChime] = useState<boolean>(true);
 
   // Minimal runtime-safe typing for extended settings
-  type AppSettings = { enableHoverPreviews?: boolean; enableAchievementChime?: boolean };
+  type AppSettings = { enableHoverPreviews?: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean };
 
   useEffect(() => {
     if (!open) return;
@@ -25,6 +26,7 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
       try {
         const s: AppSettings = await window.api.getAppSettings();
         setEnableHoverPreviews(!!s.enableHoverPreviews);
+        if (typeof s.enableScrubPreview === 'boolean') setEnableScrubPreview(!!s.enableScrubPreview); else setEnableScrubPreview(true);
         if (typeof s.enableAchievementChime === 'boolean') setEnableAchievementChime(!!s.enableAchievementChime);
       } catch {}
     })();
@@ -40,8 +42,8 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const save = async () => {
     setSaving(true);
     try {
-      await window.api.setFFPaths({ ffmpegPath: ffmpegPath || undefined, ffprobePath: ffprobePath || undefined });
-  await window.api.setAppSettings({ enableHoverPreviews, enableAchievementChime } as any);
+    await window.api.setFFPaths({ ffmpegPath: ffmpegPath || undefined, ffprobePath: ffprobePath || undefined });
+    await window.api.setAppSettings({ enableHoverPreviews, enableScrubPreview, enableAchievementChime } as any);
       onSaved?.();
       onClose();
     } finally {
@@ -66,6 +68,18 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
               <span className="text-sm text-slate-200">Enable hover video previews</span>
             </label>
             <div className="text-xs text-slate-400 mt-1">When enabled, the hover panel plays a short, muted loop of the video.</div>
+          </div>
+          <div>
+            <label className="inline-flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={enableScrubPreview}
+                onChange={e => setEnableScrubPreview(e.target.checked)}
+                className="accent-steam-accent"
+              />
+              <span className="text-sm text-slate-200">Enable scrub preview thumbnails</span>
+            </label>
+            <div className="text-xs text-slate-400 mt-1">Show a small thumbnail when hovering the progress bar area.</div>
           </div>
           <div>
             <label className="inline-flex items-center gap-3 cursor-pointer select-none">
