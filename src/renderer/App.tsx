@@ -555,6 +555,20 @@ function BadgeGrid() {
     })();
   }, []);
 
+  // Keyboard shortcut: Ctrl+, to open Settings
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      try {
+        if (e.ctrlKey && e.key === ',') {
+          e.preventDefault();
+          setShowSettings(true);
+        }
+      } catch {}
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Remove any initial focus from titlebar buttons to avoid white outline on startup
   useEffect(() => {
     try {
@@ -1212,6 +1226,13 @@ function BadgeGrid() {
               {sidebarExpanded ? <FaChevronLeft size={14} /> : <FaChevronRight size={14} />}
             </button>
             <div className="text-2xl font-bold tracking-tight">Steam-like Player</div>
+            {/* Desktop Settings button (hidden on small screens) */}
+            <div className="ml-auto hidden md:flex">
+              <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
+                <FaCog />
+                <span className="hidden lg:inline">Settings</span>
+              </button>
+            </div>
             <div className="ml-auto flex gap-2 md:hidden">
               <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
                 <FaCog />
