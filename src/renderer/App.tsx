@@ -257,6 +257,7 @@ const Library: React.FC = () => {
   const [folders, setFolders] = useState<Array<{ path: string; name: string; mtime: number }>>([]);
   const [folderCovers, setFolderCovers] = useState<Record<string, string>>({});
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  const [itemMenu, setItemMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<VideoItem | null>(null);
   const [history, setHistory] = useState<Record<string, number>>({});
@@ -305,6 +306,16 @@ const Library: React.FC = () => {
   const [completedMap, setCompletedMap] = useState<Record<string, boolean>>({});
   // Cache the highest known lastPositionSec per path to avoid regressions when rewatching
   const lastPosRef = useRef<Record<string, number>>({});
+  // Manual completion overrides (session-level). Values: 'watched' | 'unwatched'
+  const [completionOverride, setCompletionOverride] = useState<Record<string, 'watched' | 'unwatched'>>({});
+
+  // Utility to compute watched flag with overrides first
+  const isWatched = (path: string) => {
+    const o = completionOverride[path];
+    if (o === 'watched') return true;
+    if (o === 'unwatched') return false;
+    return !!completedMap[path];
+  };
 
   // Helper: only increase last position; never decrease
   const setLastPositionMax = async (path: string, pos: number | undefined) => {
@@ -341,7 +352,11 @@ const Library: React.FC = () => {
       const nearEnd = allowNearEnd && (remaining !== undefined && remaining <= 10);
       const completed = durSec > 0 && (ratio >= 0.95 || nearEnd);
       setCompletedMap(prev => {
-        const sticky = prev[path] ? true : completed; // once true, stay true
+        const forced = completionOverride[path];
+        if (forced === 'unwatched') {
+          return prev[path] === false ? prev : { ...prev, [path]: false };
+        }
+        const sticky = prev[path] ? true : completed; // once true, stay true (unless forced unwatched)
         return (prev[path] === sticky) ? prev : { ...prev, [path]: sticky };
       });
       // Keep local last-position cache updated with the max we've seen
@@ -350,6 +365,40 @@ const Library: React.FC = () => {
         if (cur === undefined || lastPos > cur) lastPosRef.current[path] = lastPos;
       }
     } catch {}
+  };
+
+  // Manual progress controls
+  const markAsWatched = async (path: string) => {
+    try {
+      setCompletionOverride(prev => ({ ...prev, [path]: 'watched' }));
+      setCompletedMap(prev => ({ ...prev, [path]: true }));
+      try {
+        const meta = await window.api.getMeta(path);
+        if (meta?.duration && Number.isFinite(meta.duration)) {
+          await window.api.setLastPosition(path, meta.duration).catch(()=>{});
+          lastPosRef.current[path] = meta.duration!;
+        }
+      } catch {}
+      setInsightsDirty(true);
+      await refreshHistory();
+      await recomputeCompletion(path).catch(()=>{});
+    } catch {}
+  };
+
+  const markAsUnwatched = async (path: string) => {
+    try {
+      setCompletionOverride(prev => ({ ...prev, [path]: 'unwatched' }));
+      setCompletedMap(prev => ({ ...prev, [path]: false }));
+      try { await window.api.setLastPosition(path, 0).catch(()=>{}); lastPosRef.current[path] = 0; } catch {}
+      setInsightsDirty(true);
+      await refreshHistory();
+      await recomputeCompletion(path).catch(()=>{});
+    } catch {}
+  };
+
+  const resetProgress = async (path: string) => {
+    // Reset behaves like unwatched plus clears resume position
+    await markAsUnwatched(path);
   };
 
 // --- Achievements minimal list ---
@@ -791,7 +840,7 @@ function BadgeGrid() {
         }
       }
 
-      // completed videos (>=95% watched or near end: remaining <= 10s, only for long videos)
+      // completed videos (>=95% watched or near end: remaining <= 10s, only for long videos), respecting manual overrides
       const completedList: InsightData["completed"] = [];
       for (const p of allPaths) {
         const durSec = pathMeta[p]?.duration || 0;
@@ -804,7 +853,8 @@ function BadgeGrid() {
   const ratio = durSec > 0 ? (totSec / durSec) : 0;
   // Also consider session-sticky completedMap to avoid removals when rewatching
   const stickyCompleted = !!completedMap[p];
-  const isCompleted = stickyCompleted || (durSec > 0 && (ratio >= 0.95 || nearEnd));
+  const override = completionOverride[p];
+  const isCompleted = override === 'unwatched' ? false : (override === 'watched' ? true : (stickyCompleted || (durSec > 0 && (ratio >= 0.95 || nearEnd))));
         if (isCompleted) {
           completedList.push({ path: p, name: p.split('\\').pop() || p, thumb: pathMeta[p]?.thumb });
         }
@@ -1579,6 +1629,7 @@ function BadgeGrid() {
                      }}
                      onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
                 >
+                  <div onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setItemMenu({ x: e.clientX, y: e.clientY, path: vItem.path }); }}>
                   <GameCard
                     title={vItem.name}
                     cover={vItem.thumb}
@@ -1588,7 +1639,7 @@ function BadgeGrid() {
                       formatDuration(vItem.duration),
                       new Date(vItem.mtime).toLocaleDateString(),
                     ].filter(Boolean).join(' • ')}
-                    watched={!!completedMap[vItem.path]}
+                    watched={isWatched(vItem.path)}
                     overlayThumb={vItem.thumb}
                     overlayDetails={[
                       'FILE INFO',
@@ -1598,6 +1649,7 @@ function BadgeGrid() {
                     onPlay={() => setSelected(vItem)}
                     onClick={() => setSelected(vItem)}
                   />
+                  </div>
                 </div>
               ))
             ) : (
@@ -1669,6 +1721,7 @@ function BadgeGrid() {
                          }}
                          onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
                     >
+                      <div onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setItemMenu({ x: e.clientX, y: e.clientY, path: vItem.path }); }}>
                       <GameCard
                         title={vItem.name}
                         cover={vItem.thumb}
@@ -1678,7 +1731,7 @@ function BadgeGrid() {
                           formatDuration(vItem.duration),
                           new Date(vItem.mtime).toLocaleDateString(),
                         ].filter(Boolean).join(' • ')}
-                        watched={!!completedMap[vItem.path]}
+                        watched={isWatched(vItem.path)}
                         overlayThumb={vItem.thumb}
                         overlayDetails={[
                           'FILE INFO',
@@ -1688,6 +1741,7 @@ function BadgeGrid() {
                         onPlay={() => setSelected(vItem)}
                         onClick={() => setSelected(vItem)}
                       />
+                      </div>
                     </div>
                   );
                 }
@@ -1760,6 +1814,7 @@ function BadgeGrid() {
             }}
             onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
           >
+            <div onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setItemMenu({ x: e.clientX, y: e.clientY, path: v.path }); }}>
             <GameCard
               title={v.name}
               cover={v.thumb}
@@ -1769,7 +1824,7 @@ function BadgeGrid() {
                 formatDuration(v.duration),
                 new Date(v.mtime).toLocaleDateString(),
               ].filter(Boolean).join(' • ')}
-              watched={!!completedMap[v.path]}
+              watched={isWatched(v.path)}
               overlayThumb={v.thumb}
               overlayDetails={[
                 'FILE INFO',
@@ -1779,6 +1834,7 @@ function BadgeGrid() {
               onPlay={() => setSelected(v)}
               onClick={() => setSelected(v)}
             />
+            </div>
           </div>
         ))}
         {filtered.length === 0 && (
@@ -1842,6 +1898,26 @@ function BadgeGrid() {
                 }
               },
               { label: 'Open in Explorer', onClick: async () => { await window.api.revealInExplorer(folderMenu.path); setFolderMenu(null); } },
+            ]}
+          />
+        )}
+
+        {itemMenu && (
+          <ContextMenu
+            x={itemMenu.x}
+            y={itemMenu.y}
+            onClose={() => setItemMenu(null)}
+            items={[
+              { label: 'Play', onClick: async () => {
+                try {
+                  const local = videos.find(v=>v.path===itemMenu.path) || categoryVideoMap[itemMenu.path];
+                  if (local) setSelected(local as any);
+                } catch {}
+                setItemMenu(null);
+              }},
+              { label: 'Mark as watched', onClick: async () => { await markAsWatched(itemMenu.path); setItemMenu(null); } },
+              { label: 'Mark as unwatched', onClick: async () => { await markAsUnwatched(itemMenu.path); setItemMenu(null); } },
+              { label: 'Reset progress', onClick: async () => { await resetProgress(itemMenu.path); setItemMenu(null); } },
             ]}
           />
         )}
