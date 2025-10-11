@@ -70,14 +70,27 @@ const AchievementEditor: React.FC<{
   const [target, setTarget] = useState(firstRule.target ?? 60);
   const [rollingDays, setRollingDays] = useState(firstRule.window?.rollingDays ?? 7);
   const [exts, setExts] = useState((firstRule.filters?.exts || []).join(','));
-  const [cats, setCats] = useState((firstRule.filters?.categories || []).join(','));
+  // Category multi-select state
+  const [selectedCats, setSelectedCats] = useState<string[]>(firstRule.filters?.categories || []);
+  const [availableCategories, setAvailableCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+
+  // Fetch categories on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const cats = await window.api.getCategories();
+        setAvailableCategories(cats.map((c: any) => ({ id: c.id, name: c.name })));
+      } catch {}
+    })();
+  }, []);
 
   const save = async () => {
     try {
       const currentDefs = (await window.api.getAchievements()) || [];
       const filters: any = {};
       if (exts.trim()) filters.exts = exts.split(',').map((s: string) => s.trim()).filter(Boolean);
-      if (cats.trim()) filters.categories = cats.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (selectedCats.length > 0) filters.categories = selectedCats;
       const rule: any = { metric, operator, target, filters };
       if (metric === 'minutesInWindow') rule.window = { rollingDays };
       if (existing) {
@@ -235,16 +248,61 @@ const AchievementEditor: React.FC<{
           <div className="text-xs text-slate-400 mb-1.5">Extensions (comma-separated)</div>
             <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" placeholder="mp4,mkv" value={exts} onChange={e=>setExts(e.target.value)} />
         </div>
-        <div>
-          <div className="text-xs text-slate-400 mb-1.5">Categories (ids or names, comma-separated)</div>
-          <input className="w-full bg-slate-800 rounded-md px-3 h-10 text-sm" value={cats} onChange={e=>setCats(e.target.value)} />
+        <div className="relative">
+          <div className="text-xs text-slate-400 mb-1.5">Categories (select multiple)</div>
+          <div
+            className="w-full bg-slate-800 rounded-md px-3 py-2 text-sm min-h-[40px] cursor-pointer flex flex-wrap gap-1 items-center"
+            onClick={() => setCatDropdownOpen(!catDropdownOpen)}
+          >
+            {selectedCats.length === 0 && <span className="text-slate-500">Select categories...</span>}
+            {selectedCats.map(catId => {
+              const cat = availableCategories.find(c => c.id === catId || c.name === catId);
+              const label = cat?.name || catId;
+              return (
+                <span key={catId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-700 text-white text-xs">
+                  {label}
+                  <button
+                    type="button"
+                    className="hover:text-red-300"
+                    onClick={(e) => { e.stopPropagation(); setSelectedCats(prev => prev.filter(c => c !== catId)); }}
+                  >×</button>
+                </span>
+              );
+            })}
+          </div>
+          {catDropdownOpen && (
+            <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-slate-700 rounded-md shadow-lg max-h-48 overflow-y-auto">
+              {availableCategories.length === 0 && (
+                <div className="px-3 py-2 text-xs text-slate-400">No categories available</div>
+              )}
+              {availableCategories.map(cat => {
+                const isSelected = selectedCats.includes(cat.id) || selectedCats.includes(cat.name);
+                return (
+                  <div
+                    key={cat.id}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-slate-700 ${isSelected ? 'bg-slate-700 text-sky-300' : 'text-slate-200'}`}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedCats(prev => prev.filter(c => c !== cat.id && c !== cat.name));
+                      } else {
+                        setSelectedCats(prev => [...prev, cat.id]);
+                      }
+                    }}
+                  >
+                    <span className="mr-2">{isSelected ? '✓' : ' '}</span>
+                    {cat.name}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Action Buttons */}
       <div className="mt-6 flex gap-3">
-        <button onClick={save} className="px-4 py-2 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-sm">{existing ? 'Update' : 'Save'}</button>
-        <button onClick={onClose} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
+        <button onClick={() => { setCatDropdownOpen(false); save(); }} className="px-4 py-2 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-sm">{existing ? 'Update' : 'Save'}</button>
+        <button onClick={() => { setCatDropdownOpen(false); onClose(); }} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
       </div>
     </div>
   );
