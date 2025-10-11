@@ -213,6 +213,8 @@ type AchievementRule = {
   target: number;
   // Optional filters (MVP ignored, reserved for future)
   filters?: {
+    // Restrict to these exact video file paths (ANDed with other filters)
+    videos?: string[];
     categories?: string[];
     exts?: string[];
     sizeMB?: { min?: number; max?: number };
@@ -719,6 +721,9 @@ async function evaluateAchievementsOnProgress(_filePath: string) {
   // Helpers
   const pathMatchesFilters = (p: string, filters?: AchievementRule['filters']): boolean => {
     if (!filters) return true;
+    if (filters.videos && filters.videos.length) {
+      if (!filters.videos.includes(p)) return false;
+    }
     if (filters.exts && filters.exts.length) {
       if (!filters.exts.map(e => e.toLowerCase()).includes(extOf(p))) return false;
     }

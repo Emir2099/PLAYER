@@ -34,8 +34,8 @@ declare interface Window {
   getAppSettings: () => Promise<{ enableHoverPreviews: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean; enableAutoplayNext?: boolean; autoplayCountdownSec?: number }>;
   setAppSettings: (v: { enableHoverPreviews?: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean; enableAutoplayNext?: boolean; autoplayCountdownSec?: number }) => Promise<boolean>;
   // Achievements
-  getAchievements: () => Promise<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: any[]; notify?: boolean }>>;
-  setAchievements: (defs: Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: any[]; notify?: boolean }>) => Promise<boolean>;
+  getAchievements: () => Promise<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: Array<{ metric: string; operator: string; target: number; window?: { rollingDays?: number }; filters?: { videos?: string[]; categories?: string[]; exts?: string[] } }>; notify?: boolean }>>;
+  setAchievements: (defs: Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: Array<{ metric: string; operator: string; target: number; window?: { rollingDays?: number }; filters?: { videos?: string[]; categories?: string[]; exts?: string[] } }>; notify?: boolean }>) => Promise<boolean>;
   getAchievementState: () => Promise<Record<string, { id: string; unlockedAt?: string; progress?: { current: number; target: number }; lastEvaluatedAt?: string }>>;
   resetAchievementState: (id?: string) => Promise<boolean>;
   onAchievementUnlocked: (cb: (payload: { id: string; name: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary' }) => void) => () => void;

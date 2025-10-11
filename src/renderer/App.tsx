@@ -76,6 +76,8 @@ const AchievementEditor: React.FC<{
   const [catDropdownOpen, setCatDropdownOpen] = useState(false);
   const catInputRef = useRef<HTMLDivElement | null>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
+  // Specific videos filter (exact file paths)
+  const [videoPaths, setVideoPaths] = useState<string[]>(firstRule.filters?.videos || []);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -101,6 +103,7 @@ const AchievementEditor: React.FC<{
       const filters: any = {};
       if (exts.trim()) filters.exts = exts.split(',').map((s: string) => s.trim()).filter(Boolean);
       if (selectedCats.length > 0) filters.categories = selectedCats;
+      if (videoPaths.length > 0) filters.videos = videoPaths;
       const rule: any = { metric, operator, target, filters };
       if (metric === 'minutesInWindow') rule.window = { rollingDays };
       if (existing) {
@@ -311,6 +314,48 @@ const AchievementEditor: React.FC<{
             </div>,
             document.body
           )}
+        </div>
+        {/* Specific videos selector */}
+        <div className="col-span-full">
+          <div className="text-xs text-slate-400 mb-1.5">Specific videos (exact matches)</div>
+          <div className="rounded-md border border-slate-700 bg-slate-900/40 p-3">
+            {videoPaths.length === 0 ? (
+              <div className="text-xs text-slate-500 mb-2">No videos selected. Add one or paste a path below.</div>
+            ) : (
+              <div className="max-h-32 overflow-auto mb-2 space-y-1">
+                {videoPaths.map((p, idx) => (
+                  <div key={p+idx} className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="truncate flex-1" title={p}>{p}</span>
+                    <button type="button" className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-[11px]" onClick={()=> setVideoPaths(prev => prev.filter((_,i)=> i!==idx))}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-slate-800 rounded-md px-3 h-9 text-xs"
+                placeholder="Paste file path and press Add"
+                onKeyDown={(e)=>{
+                  const el = e.currentTarget as HTMLInputElement;
+                  if (e.key === 'Enter') {
+                    const val = el.value.trim();
+                    if (val && !videoPaths.includes(val)) setVideoPaths(prev => [...prev, val]);
+                    el.value = '';
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="px-3 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
+                onClick={async ()=>{
+                  try {
+                    const p = await window.api.selectFile?.([{ name: 'Videos', extensions: ['mp4','mkv','avi','mov','wmv','webm','flv','m4v','ts','mts','m2ts'] }]);
+                    if (p && !videoPaths.includes(p)) setVideoPaths(prev => [...prev, p]);
+                  } catch {}
+                }}
+              >Add…</button>
+            </div>
+          </div>
         </div>
       </div>
 
