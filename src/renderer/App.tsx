@@ -74,6 +74,8 @@ const AchievementEditor: React.FC<{
   const [selectedCats, setSelectedCats] = useState<string[]>(firstRule.filters?.categories || []);
   const [availableCategories, setAvailableCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+  const catInputRef = useRef<HTMLDivElement | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
 
   // Fetch categories on mount
   useEffect(() => {
@@ -84,6 +86,14 @@ const AchievementEditor: React.FC<{
       } catch {}
     })();
   }, []);
+
+  // Update dropdown position when opened
+  useEffect(() => {
+    if (catDropdownOpen && catInputRef.current) {
+      const rect = catInputRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+  }, [catDropdownOpen]);
 
   const save = async () => {
     try {
@@ -251,6 +261,7 @@ const AchievementEditor: React.FC<{
         <div className="relative">
           <div className="text-xs text-slate-400 mb-1.5">Categories (select multiple)</div>
           <div
+            ref={catInputRef}
             className="w-full bg-slate-800 rounded-md px-3 py-2 text-sm min-h-[40px] cursor-pointer flex flex-wrap gap-1 items-center"
             onClick={() => setCatDropdownOpen(!catDropdownOpen)}
           >
@@ -270,8 +281,11 @@ const AchievementEditor: React.FC<{
               );
             })}
           </div>
-          {catDropdownOpen && (
-            <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-slate-700 rounded-md shadow-lg max-h-48 overflow-y-auto">
+          {catDropdownOpen && createPortal(
+            <div
+              className="fixed z-[9999] bg-slate-800 border border-slate-700 rounded-md shadow-2xl max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
+              style={{ top: `${dropdownPos.top}px`, left: `${dropdownPos.left}px`, width: `${dropdownPos.width}px` }}
+            >
               {availableCategories.length === 0 && (
                 <div className="px-3 py-2 text-xs text-slate-400">No categories available</div>
               )}
@@ -294,7 +308,8 @@ const AchievementEditor: React.FC<{
                   </div>
                 );
               })}
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>
@@ -304,6 +319,11 @@ const AchievementEditor: React.FC<{
         <button onClick={() => { setCatDropdownOpen(false); save(); }} className="px-4 py-2 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-sm">{existing ? 'Update' : 'Save'}</button>
         <button onClick={() => { setCatDropdownOpen(false); onClose(); }} className="px-4 py-2 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-sm">Cancel</button>
       </div>
+      {/* Click outside to close dropdown */}
+      {catDropdownOpen && createPortal(
+        <div className="fixed inset-0 z-[9998]" onClick={() => setCatDropdownOpen(false)} />,
+        document.body
+      )}
     </div>
   );
 };
