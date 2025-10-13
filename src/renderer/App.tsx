@@ -1537,7 +1537,7 @@ function BadgeGrid() {
       {/* Custom Title Bar */}
       <div className="titlebar fixed top-0 left-0 right-0 h-8 z-50 bg-gradient-to-r from-[#0e141c] via-[#111827] to-[#0e141c] border-b border-slate-800/80">
         <div className="h-full flex items-center px-2">
-          <div className="text-[12px] text-slate-300/90 tracking-wide">Steam-like Player</div>
+          <div className="text-[12px] text-slate-300/90 tracking-wide">PrismPlay</div>
           <div className="no-drag ml-auto flex items-center gap-1">
             <button onClick={() => window.api.winMinimize?.()} className="is-win-btn w-10 h-8 inline-flex items-center justify-center text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors rounded-md" title="Minimize">
               <FaMinus size={12} />
@@ -1628,7 +1628,10 @@ function BadgeGrid() {
             >
               {sidebarExpanded ? <FaChevronLeft size={14} /> : <FaChevronRight size={14} />}
             </button>
-            <div className="text-2xl font-bold tracking-tight">Steam-like Player</div>
+            <div className="flex items-center gap-2">
+              <img src="/prism_play_logo.png" alt="PrismPlay" className="w-6 h-6 rounded-sm select-none" draggable={false} />
+              <div className="text-2xl font-bold tracking-tight">PrismPlay</div>
+            </div>
             {/* Desktop Settings button (hidden on small screens) */}
             <div className="ml-auto hidden md:flex">
               <button onClick={() => setShowSettings(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">

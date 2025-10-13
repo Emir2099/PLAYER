@@ -1,10 +1,10 @@
-# Steam-like Player (Windows)
+# PrismPlay (Windows)
 
-A desktop Electron + React app that scans a folder on your PC and shows your videos in a Steam-like library UI with cards and a built-in player.
+A desktop Electron + React app that scans a folder on your PC and shows your videos in a sleek, Steam-inspired library UI with cards and a built-in player.
 
 Features
 - Choose any folder and auto-scan for videos (mp4, mkv, avi, mov, wmv, webm, flv, m4v, ts, mts, m2ts)
-- Steam-inspired dark UI with search, sort, and responsive grid
+- Sleek dark UI with search, sort, and responsive grid
 - Play videos inline with a modal player
 - Reveal file in Explorer
  - Optional: show duration and thumbnails using FFmpeg/FFprobe

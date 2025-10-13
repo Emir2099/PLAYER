@@ -24,6 +24,77 @@ let splashWindow: BrowserWindow | null = null;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Ensure app display name
+try { app.setName('PrismPlay'); } catch {}
+
+// --- One-time migration: preserve previous userData after rename to PrismPlay ---
+async function migrateUserDataIfNeeded() {
+  try {
+    const newUserData = app.getPath('userData');
+    const newSettings = path.join(newUserData, 'settings.json');
+
+    // Probe likely old app names (from previous package.json name/title)
+    const appDataBase = app.getPath('appData');
+    const candidates = [
+      'player-steam-like',
+      'Steam-like Player',
+      'steam-like-player'
+    ].map(n => path.join(appDataBase, n));
+
+    let oldDir: string | null = null;
+    for (const c of candidates) {
+      try {
+        if (existsSync(c) && existsSync(path.join(c, 'settings.json'))) { oldDir = c; break; }
+      } catch {}
+    }
+    if (!oldDir) return;
+
+    // Ensure new dir exists then copy/merge artifacts
+    try { await fs.mkdir(newUserData, { recursive: true }); } catch {}
+
+    // Merge settings.json if new exists (likely empty) else copy over
+    try {
+      const oldSettingsPath = path.join(oldDir, 'settings.json');
+      const hasOld = existsSync(oldSettingsPath);
+      if (hasOld) {
+        const oldRaw = await fs.readFile(oldSettingsPath, 'utf-8').catch(()=>"{}") as string;
+        const oldData = JSON.parse(oldRaw || '{}');
+        if (existsSync(newSettings)) {
+          const newRaw = await fs.readFile(newSettings, 'utf-8').catch(()=>"{}") as string;
+          const newData = JSON.parse(newRaw || '{}');
+          const merged = { ...oldData, ...newData };
+          await fs.writeFile(newSettings, JSON.stringify(merged, null, 2), 'utf-8').catch(()=>{});
+        } else {
+          await fs.copyFile(oldSettingsPath, newSettings).catch(()=>{});
+        }
+      }
+    } catch {}
+
+    // Copy auxiliary folders (non-destructive): thumbnails, folder-covers, category-covers
+    const auxDirs = ['thumbnails', 'folder-covers', 'category-covers'];
+    for (const dirName of auxDirs) {
+      const srcDir = path.join(oldDir, dirName);
+      const dstDir = path.join(newUserData, dirName);
+      try {
+        if (existsSync(srcDir)) {
+          try { await fs.mkdir(dstDir, { recursive: true }); } catch {}
+          try {
+            const files = await fs.readdir(srcDir, { withFileTypes: true });
+            for (const f of files) {
+              if (!f.isFile()) continue;
+              const s = path.join(srcDir, f.name);
+              const d = path.join(dstDir, f.name);
+              if (!existsSync(d)) {
+                try { await fs.copyFile(s, d); } catch {}
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
 // Configure ffmpeg paths if available (static defaults)
 if (ffmpegPath) try { ffmpeg.setFfmpegPath(ffmpegPath); } catch {}
 if (ffprobeStatic?.path) try { ffmpeg.setFfprobePath(ffprobeStatic.path); } catch {}
@@ -46,6 +117,8 @@ type Settings = {
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
+  // Before initializing ElectronStore, migrate old userData if needed
+  await migrateUserDataIfNeeded();
   const s = new ElectronStore<Settings>({ name: 'settings' });
   store = { get: (k) => s.get(k as any), set: (k, v) => s.set(k as any, v) };
 } catch {
@@ -112,6 +185,7 @@ async function createWindow() {
     backgroundColor: '#0b0f15',
     show: false,
     frame: false,
+    icon: path.join(process.cwd(), 'public', 'icon.ico'),
     webPreferences: {
       contextIsolation: true,
       preload: getPreloadPath(),
@@ -119,7 +193,7 @@ async function createWindow() {
       sandbox: true,
       webSecurity: !isDev,
     },
-    title: 'Steam-like Player'
+  title: 'PrismPlay'
   });
 
   try { Menu.setApplicationMenu(null); } catch {}

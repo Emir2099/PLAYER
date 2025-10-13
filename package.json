@@ -1,8 +1,8 @@
 {
-  "name": "player-steam-like",
+  "name": "prismplay",
   "version": "0.1.0",
   "private": true,
-  "description": "Steam-like video library player for Windows (Electron + React + TS)",
+  "description": "PrismPlay — a sleek video library player for Windows (Electron + React + TS)",
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "build": "npm run build:ui && npm run build:electron",
     "start": "cross-env NODE_ENV=production electron .",
     "lint": "eslint --ext .ts,.tsx src electron",
-    "dist": "echo Packaging is disabled in this setup. Install electron-builder to enable."
+  "dist": "echo Packaging is disabled in this setup. Install electron-builder to enable."
   },
   "dependencies": {
     "mime-types": "^2.1.35",
@@ -43,7 +43,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.local.steamlikeplayer",
+    "appId": "com.local.prismplay",
+    "artifactName": "PrismPlay-Setup.${ext}",
     "files": [
       "dist/**",
       "electron/main.js",
@@ -51,7 +52,8 @@
     ],
     "asar": true,
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "public/icon.ico"
     }
   }
 }
