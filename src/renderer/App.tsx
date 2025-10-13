@@ -84,6 +84,14 @@ const AchievementEditor: React.FC<{
   const [libFilter, setLibFilter] = useState('');
   const [libSelected, setLibSelected] = useState<Record<string, boolean>>({});
   const [libMeta, setLibMeta] = useState<Record<string, { name: string; duration?: number; thumb?: string | null; categories: string[] }>>({});
+  const [extraCandidates, setExtraCandidates] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<'name'|'duration'>('name');
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc');
+
+  const allCandidates = useMemo(() => {
+    const base = Array.from(new Set([...(libraryCandidates || []), ...extraCandidates].filter(Boolean)));
+    return base;
+  }, [libraryCandidates, extraCandidates]);
 
   // Build rich metadata for library candidates when opening the picker
   useEffect(() => {
@@ -91,7 +99,7 @@ const AchievementEditor: React.FC<{
     let cancelled = false;
     (async () => {
       try {
-        const paths = Array.from(new Set((libraryCandidates || []).filter(Boolean)));
+        const paths = Array.from(new Set((allCandidates || []).filter(Boolean)));
         // Load categories to compute chips
         let catList: Array<{ id: string; name: string; items: Array<{ type: 'video'|'folder'; path: string }> }> = [];
         try { catList = await window.api.getCategories(); } catch {}
@@ -130,7 +138,7 @@ const AchievementEditor: React.FC<{
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [libPickerOpen, libraryCandidates]);
+  }, [libPickerOpen, allCandidates]);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -427,17 +435,47 @@ const AchievementEditor: React.FC<{
               <div className="text-slate-200 font-semibold text-sm">Pick from library</div>
               <button className="text-slate-300 hover:text-white" onClick={()=> setLibPickerOpen(false)}>×</button>
             </div>
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-3 flex items-center gap-2 flex-wrap">
               <input
                 className="flex-1 bg-slate-800 rounded-md px-3 h-9 text-sm"
                 placeholder="Filter by path or name"
                 value={libFilter}
                 onChange={e=> setLibFilter(e.target.value)}
               />
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-400">Sort</label>
+                <select className="bg-slate-800 rounded px-2 h-9 text-xs text-slate-200" value={sortKey} onChange={e=> setSortKey(e.target.value as any)}>
+                  <option value="name">Name</option>
+                  <option value="duration">Duration</option>
+                </select>
+                <button
+                  type="button"
+                  className="px-2 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
+                  onClick={()=> setSortDir(d => d==='asc'?'desc':'asc')}
+                  title="Toggle sort direction"
+                >{sortDir==='asc' ? 'Asc' : 'Desc'}</button>
+              </div>
+              <button
+                className="px-2 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
+                onClick={async ()=>{
+                  try {
+                    const dir = await window.api.selectFolder();
+                    if (!dir) return;
+                    const items = await window.api.scanVideos(dir, { recursive: true, depth: 5 });
+                    const paths = (items||[]).map((it:any)=> it.path).filter(Boolean);
+                    if (paths.length) setExtraCandidates(prev => Array.from(new Set([...prev, ...paths])));
+                  } catch {}
+                }}
+              >Load from folder…</button>
               <button
                 className="px-2 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
                 onClick={()=>{
-                  const list = (libraryCandidates||[]).filter(p => !libFilter.trim() || p.toLowerCase().includes(libFilter.trim().toLowerCase()));
+                  const list = (allCandidates||[]).filter(p => {
+                    const f = libFilter.trim().toLowerCase();
+                    if (!f) return true;
+                    const info = libMeta[p];
+                    return p.toLowerCase().includes(f) || (info?.name||'').toLowerCase().includes(f);
+                  });
                   const map: Record<string, boolean> = {};
                   for (const p of list) map[p] = true;
                   setLibSelected(map);
@@ -459,8 +497,28 @@ const AchievementEditor: React.FC<{
               >Add selected</button>
             </div>
             <div className="h-96 overflow-auto rounded border border-slate-700 bg-slate-900/30">
-              {(libraryCandidates||[])
-                .filter(p => !libFilter.trim() || p.toLowerCase().includes(libFilter.trim().toLowerCase()) || (libMeta[p]?.name || '').toLowerCase().includes(libFilter.trim().toLowerCase()))
+              {(allCandidates||[])
+                .filter(p => {
+                  const f = libFilter.trim().toLowerCase();
+                  if (!f) return true;
+                  const info = libMeta[p];
+                  return p.toLowerCase().includes(f) || (info?.name||'').toLowerCase().includes(f);
+                })
+                .sort((a,b)=>{
+                  const ia = libMeta[a];
+                  const ib = libMeta[b];
+                  let cmp = 0;
+                  if (sortKey === 'name') {
+                    const na = (ia?.name || a).toLowerCase();
+                    const nb = (ib?.name || b).toLowerCase();
+                    cmp = na.localeCompare(nb);
+                  } else {
+                    const da = Number.isFinite(ia?.duration as any) ? (ia?.duration as number) : Number.POSITIVE_INFINITY;
+                    const db = Number.isFinite(ib?.duration as any) ? (ib?.duration as number) : Number.POSITIVE_INFINITY;
+                    cmp = da - db;
+                  }
+                  return sortDir==='asc' ? cmp : -cmp;
+                })
                 .map((p) => {
                   const info = libMeta[p];
                   const name = info?.name || (p.split('\\').pop() || p.split('/').pop() || p);
@@ -490,7 +548,7 @@ const AchievementEditor: React.FC<{
                     </label>
                   );
                 })}
-              {(!libraryCandidates || libraryCandidates.length===0) && (
+              {(!allCandidates || allCandidates.length===0) && (
                 <div className="p-4 text-sm text-slate-400">No library videos available to pick.</div>
               )}
             </div>
