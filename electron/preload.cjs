@@ -15,6 +15,7 @@ const api = {
   getHistory: () => ipcRenderer.invoke('history:get'),
   markWatched: (p) => ipcRenderer.invoke('history:mark', p),
   selectFile: (filters) => ipcRenderer.invoke('dialog:selectFile', filters),
+  selectFiles: (filters) => ipcRenderer.invoke('dialog:selectFiles', filters),
   getFFPaths: () => ipcRenderer.invoke('store:getFFPaths'),
   setFFPaths: (v) => ipcRenderer.invoke('store:setFFPaths', v),
   testFF: () => ipcRenderer.invoke('ff:test'),
