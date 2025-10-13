@@ -53,7 +53,8 @@ const AchievementEditor: React.FC<{
   existing?: any;
   onClose: () => void;
   onSaved: () => void;
-}> = ({ existing, onClose, onSaved }) => {
+  libraryCandidates?: string[]; // optional list of video paths to pick from
+}> = ({ existing, onClose, onSaved, libraryCandidates }) => {
   // Seed initial state from existing (edit) or defaults (create)
   const [name, setName] = useState(existing?.name || 'New Achievement');
   const [description, setDescription] = useState(existing?.description || '');
@@ -78,6 +79,10 @@ const AchievementEditor: React.FC<{
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number }>({ top: 0, left: 0, width: 0 });
   // Specific videos filter (exact file paths)
   const [videoPaths, setVideoPaths] = useState<string[]>(firstRule.filters?.videos || []);
+  // Library picker state
+  const [libPickerOpen, setLibPickerOpen] = useState(false);
+  const [libFilter, setLibFilter] = useState('');
+  const [libSelected, setLibSelected] = useState<Record<string, boolean>>({});
 
   // Fetch categories on mount
   useEffect(() => {
@@ -331,7 +336,7 @@ const AchievementEditor: React.FC<{
                 ))}
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap items-center">
               <input
                 className="flex-1 bg-slate-800 rounded-md px-3 h-9 text-xs"
                 placeholder="Paste file path and press Add"
@@ -349,15 +354,66 @@ const AchievementEditor: React.FC<{
                 className="px-3 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
                 onClick={async ()=>{
                   try {
-                    const p = await window.api.selectFile?.([{ name: 'Videos', extensions: ['mp4','mkv','avi','mov','wmv','webm','flv','m4v','ts','mts','m2ts'] }]);
-                    if (p && !videoPaths.includes(p)) setVideoPaths(prev => [...prev, p]);
+                    const picked = await window.api.selectFiles?.([{ name: 'Videos', extensions: ['mp4','mkv','avi','mov','wmv','webm','flv','m4v','ts','mts','m2ts'] }]);
+                    const arr = (picked || []).filter(Boolean);
+                    if (arr.length) setVideoPaths(prev => [...prev, ...arr.filter(p => !prev.includes(p))]);
                   } catch {}
                 }}
-              >Add…</button>
+              >Add from disk…</button>
+              <button
+                type="button"
+                disabled={!libraryCandidates || libraryCandidates.length===0}
+                className={`px-3 h-9 rounded-md ${(!libraryCandidates || libraryCandidates.length===0)?'bg-slate-800 text-slate-400 cursor-not-allowed':'bg-slate-700 hover:bg-slate-600 text-white'} text-xs`}
+                onClick={()=> setLibPickerOpen(true)}
+              >Add from library…</button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Library picker modal */}
+      {libPickerOpen && createPortal(
+        <div className="fixed inset-0 z-[1600] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6" onClick={()=> setLibPickerOpen(false)}>
+          <div className="w-full max-w-3xl rounded-xl border border-slate-700 bg-steam-card p-4" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-slate-200 font-semibold text-sm">Pick from library</div>
+              <button className="text-slate-300 hover:text-white" onClick={()=> setLibPickerOpen(false)}>×</button>
+            </div>
+            <div className="mb-3 flex items-center gap-2">
+              <input
+                className="flex-1 bg-slate-800 rounded-md px-3 h-9 text-sm"
+                placeholder="Filter by path or name"
+                value={libFilter}
+                onChange={e=> setLibFilter(e.target.value)}
+              />
+              <button
+                className="px-3 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
+                onClick={()=>{
+                  const selected = Object.keys(libSelected).filter(p => libSelected[p]);
+                  if (selected.length) setVideoPaths(prev => [...prev, ...selected.filter(p => !prev.includes(p))]);
+                  setLibPickerOpen(false);
+                  setLibFilter('');
+                  setLibSelected({});
+                }}
+              >Add selected</button>
+            </div>
+            <div className="h-80 overflow-auto rounded border border-slate-700 bg-slate-900/30">
+              {(libraryCandidates||[])
+                .filter(p => !libFilter.trim() || p.toLowerCase().includes(libFilter.trim().toLowerCase()))
+                .map((p) => (
+                  <label key={p} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-200 border-b border-slate-800/60">
+                    <input type="checkbox" className="h-4 w-4" checked={!!libSelected[p]} onChange={(e)=> setLibSelected(s => ({ ...s, [p]: e.target.checked }))} />
+                    <span className="truncate" title={p}>{p}</span>
+                  </label>
+                ))}
+              {(!libraryCandidates || libraryCandidates.length===0) && (
+                <div className="p-4 text-sm text-slate-400">No library videos available to pick.</div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Action Buttons */}
       <div className="mt-6 flex gap-3">
@@ -1828,6 +1884,15 @@ function BadgeGrid() {
                     existing={editingId ? defs.find(d=>d.id===editingId) : undefined}
                     onClose={()=>{ setShowEditor(false); setEditingId(null); }}
                     onSaved={async ()=>{ try { setDefs(await window.api.getAchievements()); } catch {}; try { setState(await window.api.getAchievementState()); } catch {} }}
+                    libraryCandidates={(() => {
+                      const fromVideos = videos.map(v => v.path);
+                      const fromCategory = categoryItems
+                        .filter(it => it.type==='video')
+                        .map(it => it.path)
+                        .concat(Object.keys(categoryVideoMap));
+                      const fromLibFolder = libFolderVideos.map(v => v.path);
+                      return Array.from(new Set([...fromVideos, ...fromCategory, ...fromLibFolder]));
+                    })()}
                   />
                 </div>
               </div>,

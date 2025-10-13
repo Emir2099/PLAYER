@@ -39,6 +39,10 @@ type Api = {
         name: string;
         extensions: string[];
     }>) => Promise<string | null>;
+    selectFiles: (filters?: Array<{
+        name: string;
+        extensions: string[];
+    }>) => Promise<string[]>;
     getFFPaths: () => Promise<{
         ffmpegPath?: string;
         ffprobePath?: string;

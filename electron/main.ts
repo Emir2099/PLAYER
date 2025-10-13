@@ -477,6 +477,21 @@ ipcMain.handle('dialog:selectFile', async (_e, filters?: Array<{ name: string; e
   return null;
 });
 
+// Multi-file selection dialog
+ipcMain.handle('dialog:selectFiles', async (_e, filters?: Array<{ name: string; extensions: string[] }>) => {
+  const options = {
+    title: 'Select files',
+    properties: ['openFile', 'multiSelections'] as ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles' | 'createDirectory' | 'promptToCreate' | 'noResolveAliases' | 'treatPackageAsDirectory' | 'dontAddToRecent')[],
+    filters: filters ?? [{ name: 'Videos', extensions: ['mp4','mkv','avi','mov','wmv','webm','flv','m4v','ts','mts','m2ts'] }],
+  };
+  const parent = BrowserWindow.getFocusedWindow();
+  const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+  if (!res.canceled && res.filePaths.length > 0) return res.filePaths;
+  const syncRes = parent ? dialog.showOpenDialogSync(parent, options) : dialog.showOpenDialogSync(options);
+  if (syncRes && syncRes.length > 0) return syncRes;
+  return [] as string[];
+});
+
 ipcMain.handle('fs:scanVideos', async (_e, dir: string, opts?: ScanOptions) => {
   if (!dir || !existsSync(dir)) return [];
   return await scanDirectory(dir, opts);

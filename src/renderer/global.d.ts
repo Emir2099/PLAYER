@@ -24,6 +24,7 @@ declare interface Window {
     getHistory: () => Promise<Record<string, number>>;
     markWatched: (filePath: string) => Promise<boolean>;
     selectFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>;
+  selectFiles: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string[]>;
     getFFPaths: () => Promise<{ ffmpegPath?: string; ffprobePath?: string }>;
     setFFPaths: (v: { ffmpegPath?: string; ffprobePath?: string }) => Promise<boolean>;
     testFF: () => Promise<{ ffmpegOk: boolean; ffprobeOk: boolean; ffmpegError?: string; ffprobeError?: string }>;
