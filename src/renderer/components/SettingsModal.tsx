@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { FaFolderOpen } from 'react-icons/fa';
+import { useToast } from './Toast';
 
 type Props = {
   open: boolean;
@@ -7,6 +9,7 @@ type Props = {
 };
 
 const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
+  const { show, close } = useToast();
   const [ffmpegPath, setFfmpegPath] = useState<string>('');
   const [ffprobePath, setFfprobePath] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -15,6 +18,8 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const [enableAchievementChime, setEnableAchievementChime] = useState<boolean>(true);
   const [enableAutoplayNext, setEnableAutoplayNext] = useState<boolean>(true);
   const [autoplayCountdownSec, setAutoplayCountdownSec] = useState<number>(5);
+  const [testingFF, setTestingFF] = useState(false);
+  const [defaultFolder, setDefaultFolder] = useState<string | undefined>(undefined);
 
   // Minimal runtime-safe typing for extended settings
   type AppSettings = { enableHoverPreviews?: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean; enableAutoplayNext?: boolean; autoplayCountdownSec?: number };
@@ -25,6 +30,7 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
       const curr = await window.api.getFFPaths();
       setFfmpegPath(curr.ffmpegPath || '');
       setFfprobePath(curr.ffprobePath || '');
+      try { setDefaultFolder(await window.api.getLastFolder()); } catch {}
       try {
     const s: AppSettings = await window.api.getAppSettings();
         setEnableHoverPreviews(!!s.enableHoverPreviews);
@@ -55,12 +61,52 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
     }
   };
 
+  const testFF = async () => {
+    setTestingFF(true);
+    const toastId = show('Testing FFmpeg…', { loading: true, timeout: 0 });
+    try {
+      const res = await window.api.testFF();
+      close(toastId);
+      if (!res.ffmpegOk || !res.ffprobeOk) {
+        const parts: string[] = [];
+        if (!res.ffmpegOk) parts.push(`FFmpeg error: ${res.ffmpegError || 'not found'}`);
+        if (!res.ffprobeOk) parts.push(`FFprobe error: ${res.ffprobeError || 'not found'}`);
+        show(parts.join(' | '), { type: 'error' });
+      } else {
+        show('FFmpeg and FFprobe are configured', { type: 'success' });
+      }
+    } finally {
+      setTestingFF(false);
+    }
+  };
+
+  const chooseLibraryFolder = async () => {
+    const sel = await window.api.selectFolder();
+    if (sel) {
+      setDefaultFolder(sel);
+      try { await window.api.setLastFolder(sel); } catch {}
+      onSaved?.(); // allow parent to refresh
+    }
+  };
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-6" onClick={onClose}>
       <div className="bg-steam-panel rounded-xl border border-slate-800 w-full max-w-xl" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-slate-800 text-lg font-semibold">Settings</div>
         <div className="p-5 space-y-5">
+          <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <button onClick={chooseLibraryFolder} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-100">
+              <FaFolderOpen />
+              <span>Choose Folder</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={testFF} disabled={testingFF} className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-100 disabled:opacity-60">{testingFF ? 'Testing…' : 'Test FFmpeg'}</button>
+            </div>
+            {defaultFolder && (
+              <div className="col-span-full text-xs text-slate-400 truncate">Current folder: {defaultFolder}</div>
+            )}
+          </div>
           <div>
             <label className="inline-flex items-center gap-3 cursor-pointer select-none">
               <input

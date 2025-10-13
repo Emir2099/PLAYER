@@ -1570,12 +1570,7 @@ function BadgeGrid() {
             willChange: 'opacity, transform'
           }}
         >
-        <div className="flex flex-col gap-2">
-          <button onClick={chooseFolder} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">
-            <FaFolderOpen /> Choose Folder
-          </button>
-          <button onClick={testFF} className="w-full inline-flex items-center gap-2 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700">Test FFmpeg</button>
-        </div>
+        
         <div className="mt-4">
           <CategoryList
             onSelect={async (catId)=>{
@@ -2750,6 +2745,13 @@ function BadgeGrid() {
               enableAutoplayNext: s.enableAutoplayNext !== false,
               autoplayCountdownSec: (typeof s.autoplayCountdownSec==='number' ? Math.min(10, Math.max(3, Math.round(s.autoplayCountdownSec))) : 5)
             });
+            // If a new default folder was chosen in Settings, navigate to it
+            try {
+              const last = await window.api.getLastFolder();
+              if (last && last !== folder) {
+                await navigateTo(last);
+              }
+            } catch {}
           } catch {}
           refreshMeta();
         }}
