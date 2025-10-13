@@ -83,6 +83,54 @@ const AchievementEditor: React.FC<{
   const [libPickerOpen, setLibPickerOpen] = useState(false);
   const [libFilter, setLibFilter] = useState('');
   const [libSelected, setLibSelected] = useState<Record<string, boolean>>({});
+  const [libMeta, setLibMeta] = useState<Record<string, { name: string; duration?: number; thumb?: string | null; categories: string[] }>>({});
+
+  // Build rich metadata for library candidates when opening the picker
+  useEffect(() => {
+    if (!libPickerOpen) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const paths = Array.from(new Set((libraryCandidates || []).filter(Boolean)));
+        // Load categories to compute chips
+        let catList: Array<{ id: string; name: string; items: Array<{ type: 'video'|'folder'; path: string }> }> = [];
+        try { catList = await window.api.getCategories(); } catch {}
+        const catChipsFor = (p: string) => {
+          const names: string[] = [];
+          for (const c of catList) {
+            const inCat = (c.items || []).some(it => it.type==='video' ? it.path === p : p.startsWith(it.path));
+            if (inCat) names.push(c.name);
+          }
+          return names;
+        };
+        // Seed with names and category chips
+        const seed: Record<string, { name: string; duration?: number; thumb?: string | null; categories: string[] }> = {};
+        for (const p of paths) {
+          const base = p.split('\\').pop() || p.split('/').pop() || p;
+          seed[p] = { name: base, categories: catChipsFor(p) };
+        }
+        if (!cancelled) setLibMeta(prev => ({ ...seed, ...prev }));
+        // Fetch metadata in small batches to avoid hammering ffprobe
+        const batch = 8;
+        for (let i = 0; i < paths.length; i += batch) {
+          const slice = paths.slice(i, i + batch);
+          const metas = await Promise.all(slice.map(async (p) => {
+            try { return { p, meta: await window.api.getMeta(p) }; } catch { return { p, meta: {} as any }; }
+          }));
+          if (cancelled) return;
+          setLibMeta(prev => {
+            const next = { ...prev } as typeof prev;
+            for (const { p, meta } of metas) {
+              const cur = next[p] || { name: p.split('\\').pop() || p, categories: [] };
+              next[p] = { ...cur, duration: meta?.duration, thumb: (meta as any)?.thumb };
+            }
+            return next;
+          });
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [libPickerOpen, libraryCandidates]);
 
   // Fetch categories on mount
   useEffect(() => {
@@ -374,7 +422,7 @@ const AchievementEditor: React.FC<{
       {/* Library picker modal */}
       {libPickerOpen && createPortal(
         <div className="fixed inset-0 z-[1600] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6" onClick={()=> setLibPickerOpen(false)}>
-          <div className="w-full max-w-3xl rounded-xl border border-slate-700 bg-steam-card p-4" onClick={e=>e.stopPropagation()}>
+          <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-steam-card p-4" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <div className="text-slate-200 font-semibold text-sm">Pick from library</div>
               <button className="text-slate-300 hover:text-white" onClick={()=> setLibPickerOpen(false)}>×</button>
@@ -387,6 +435,19 @@ const AchievementEditor: React.FC<{
                 onChange={e=> setLibFilter(e.target.value)}
               />
               <button
+                className="px-2 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
+                onClick={()=>{
+                  const list = (libraryCandidates||[]).filter(p => !libFilter.trim() || p.toLowerCase().includes(libFilter.trim().toLowerCase()));
+                  const map: Record<string, boolean> = {};
+                  for (const p of list) map[p] = true;
+                  setLibSelected(map);
+                }}
+              >Select all</button>
+              <button
+                className="px-2 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
+                onClick={()=> setLibSelected({})}
+              >None</button>
+              <button
                 className="px-3 h-9 rounded-md bg-slate-700 hover:bg-slate-600 text-white text-xs"
                 onClick={()=>{
                   const selected = Object.keys(libSelected).filter(p => libSelected[p]);
@@ -397,15 +458,38 @@ const AchievementEditor: React.FC<{
                 }}
               >Add selected</button>
             </div>
-            <div className="h-80 overflow-auto rounded border border-slate-700 bg-slate-900/30">
+            <div className="h-96 overflow-auto rounded border border-slate-700 bg-slate-900/30">
               {(libraryCandidates||[])
-                .filter(p => !libFilter.trim() || p.toLowerCase().includes(libFilter.trim().toLowerCase()))
-                .map((p) => (
-                  <label key={p} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-200 border-b border-slate-800/60">
-                    <input type="checkbox" className="h-4 w-4" checked={!!libSelected[p]} onChange={(e)=> setLibSelected(s => ({ ...s, [p]: e.target.checked }))} />
-                    <span className="truncate" title={p}>{p}</span>
-                  </label>
-                ))}
+                .filter(p => !libFilter.trim() || p.toLowerCase().includes(libFilter.trim().toLowerCase()) || (libMeta[p]?.name || '').toLowerCase().includes(libFilter.trim().toLowerCase()))
+                .map((p) => {
+                  const info = libMeta[p];
+                  const name = info?.name || (p.split('\\').pop() || p.split('/').pop() || p);
+                  const dur = info?.duration;
+                  const durationText = dur && Number.isFinite(dur) ? `${Math.floor(dur/60)}:${(dur%60).toString().padStart(2,'0')}` : '';
+                  const thumb = info?.thumb || undefined;
+                  const cats = info?.categories || [];
+                  return (
+                    <label key={p} className="grid items-center gap-3 px-3 py-2 text-sm text-slate-200 border-b border-slate-800/60 hover:bg-slate-800/40" style={{ gridTemplateColumns: 'auto 64px 1fr auto' }}>
+                      <input type="checkbox" className="h-4 w-4" checked={!!libSelected[p]} onChange={(e)=> setLibSelected(s => ({ ...s, [p]: e.target.checked }))} />
+                      <div className="h-12 w-16 bg-slate-800 ring-1 ring-slate-700 rounded overflow-hidden flex items-center justify-center">
+                        {thumb ? (<img src={thumb} className="h-full w-full object-cover" />) : (<span className="text-[10px] text-slate-500">No preview</span>)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-slate-100 truncate" title={name}>{name}</div>
+                        <div className="text-slate-400 text-[11px] truncate" title={p}>{p}</div>
+                        {cats.length>0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {cats.slice(0,4).map(cn => (
+                              <span key={cn} className="px-1.5 py-0.5 rounded bg-slate-700/70 text-[10px] text-slate-200">{cn}</span>
+                            ))}
+                            {cats.length>4 && <span className="px-1.5 py-0.5 rounded bg-slate-700/70 text-[10px] text-slate-300">+{cats.length-4}</span>}
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-auto text-xs text-slate-300 tabular-nums">{durationText}</div>
+                    </label>
+                  );
+                })}
               {(!libraryCandidates || libraryCandidates.length===0) && (
                 <div className="p-4 text-sm text-slate-400">No library videos available to pick.</div>
               )}
