@@ -51,7 +51,8 @@
     "files": [
       "dist/**",
       "electron/main.js",
-      "electron/preload.js"
+      "electron/preload.js",
+      "electron/preload.cjs"
     ],
     "asar": true,
     "win": {

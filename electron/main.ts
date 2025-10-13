@@ -27,6 +27,9 @@ const __dirname = path.dirname(__filename);
 // Ensure app display name
 try { app.setName('PrismPlay'); } catch {}
 
+// Mitigate black screen on some systems by disabling shader disk cache
+try { app.commandLine.appendSwitch('disable-gpu-shader-disk-cache'); } catch {}
+
 // --- One-time migration: preserve previous userData after rename to PrismPlay ---
 async function migrateUserDataIfNeeded() {
   try {
@@ -114,6 +117,7 @@ type Settings = {
   uiPrefs?: { selectedCategoryId?: string | null; categoryView?: boolean };
   achievements?: AchievementDefinition[];
   achievementsState?: Record<string, AchievementState>;
+  disableHardwareAcceleration?: boolean;
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
@@ -141,6 +145,27 @@ try {
     set: (k, v) => { (cache as any)[k] = v; save(); },
   };
 }
+
+// Optionally disable hardware acceleration for problematic GPUs via env or saved setting
+try {
+  const envDisable = process.env.PRISMPLAY_DISABLE_GPU === '1' || process.argv.includes('--disable-gpu');
+  const prefDisable = !!store?.get?.('disableHardwareAcceleration');
+  if (envDisable || prefDisable) {
+    try { app.disableHardwareAcceleration(); } catch {}
+  }
+  // Electron 31: use child-process-gone to detect GPU crashes
+  app.on('child-process-gone', (_event: any, details: any) => {
+    try {
+      const isGpu = (details?.type === 'GPU');
+      const crashed = (details?.reason === 'crashed' || details?.reason === 'abnormal-exit' || details?.reason === 'oom');
+      if (isGpu && crashed) {
+        try { store?.set?.('disableHardwareAcceleration', true); } catch {}
+        try { app.relaunch(); } catch {}
+        app.exit(0);
+      }
+    } catch {}
+  });
+} catch {}
 
 // Apply any previously saved custom ffmpeg/ffprobe paths
 try {
@@ -215,6 +240,34 @@ async function createWindow() {
     })();
   });
   mainWindow.on('closed', () => (mainWindow = null));
+
+  // Optional diagnostics: open DevTools in packaged app when PRISMPLAY_DEBUG=1
+  try { if (!isDev && process.env.PRISMPLAY_DEBUG === '1') mainWindow.webContents.openDevTools({ mode: 'detach' }); } catch {}
+
+  // Robust fallback: if the renderer fails to load in production, disable GPU and relaunch
+  let finished = false;
+  mainWindow.webContents.once('did-finish-load', () => { finished = true; });
+  mainWindow.webContents.on('did-fail-load', async (_e, code, desc, url) => {
+    try {
+      const logPath = path.join(app.getPath('userData'), 'last-error.log');
+      const msg = `[${new Date().toISOString()}] did-fail-load code=${code} desc=${desc} url=${url}\n`;
+      await fs.appendFile(logPath, msg).catch(()=>{});
+    } catch {}
+    if (!isDev) {
+      try { store?.set?.('disableHardwareAcceleration', true); } catch {}
+      try { app.relaunch(); } catch {}
+      app.exit(0);
+    }
+  });
+  if (!isDev) {
+    setTimeout(() => {
+      if (!finished) {
+        try { store?.set?.('disableHardwareAcceleration', true); } catch {}
+        try { app.relaunch(); } catch {}
+        app.exit(0);
+      }
+    }, 9000);
+  }
 
   // Notify renderer when maximize state changes
   mainWindow.on('maximize', () => mainWindow?.webContents.send('win:maximize-changed', true));
