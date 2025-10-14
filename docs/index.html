@@ -6,7 +6,9 @@
     <title>PrismPlay — Download for Windows</title>
     <meta name="description" content="PrismPlay is a modern, fast video library player for Windows." />
     <meta name="theme-color" content="#0b0f15" />
-    <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/Emir2099/PLAYER/main/public/prism_play_logo.png" />
+  <link rel="icon" type="image/png" href="prism_play_logo.png" />
+  <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/Emir2099/PLAYER/main/public/prism_play_logo.png" />
+  <link rel="icon" type="image/png" href="https://cdn.jsdelivr.net/gh/Emir2099/PLAYER@main/public/prism_play_logo.png" />
     <style>
       :root {
         --bg0: #0b0f15; --bg1: #0e141c; --bg2: #0a1220; --card: #141b29; --accent: #1999ff; --muted: #9fb0c7; --text: #e8edf5;
@@ -26,7 +28,7 @@
       .g1 { top: -60px; left: -40px; width: 380px; height: 380px; background: #1999ff; border-radius: 50%; }
       .g2 { top: -40px; right: -60px; width: 420px; height: 420px; background: #22d3ee; border-radius: 50%; }
       .nav { display:flex; gap:12px; align-items:center; padding:16px 20px; max-width:1200px; margin:0 auto; position: relative; z-index: 1; }
-      .nav img { width:28px; height:28px; border-radius:6px; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+  .nav img { width:28px; height:28px; border-radius:6px; box-shadow: 0 6px 18px rgba(0,0,0,.35); object-fit: contain; background: rgba(255,255,255,0.06); }
       .nav .brand { font-weight:900; letter-spacing:0.3px; }
       .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; position: relative; z-index: 1; }
       .hero { display:grid; grid-template-columns: 1.1fr 0.9fr; align-items: center; gap: 28px; padding: 26px; border:1px solid #1f2937; border-radius: 18px; background: linear-gradient(180deg, rgba(16,24,39,0.66), rgba(16,24,39,0.34)); box-shadow: 0 28px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.02); }
@@ -58,7 +60,7 @@
     <div class="glow g1"></div>
     <div class="glow g2"></div>
     <div class="nav">
-      <img src="https://raw.githubusercontent.com/Emir2099/PLAYER/main/public/prism_play_logo.png" alt="PrismPlay" />
+  <img id="brand-logo" src="prism_play_logo.png" alt="PrismPlay" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27><defs><linearGradient id=%27g%27 x1=%270%27 y1=%270%27 x2=%271%27 y2=%271%27><stop offset=%270%25%27 stop-color=%27%2338bdf8%27/><stop offset=%27100%25%27 stop-color=%27%231999ff%27/></linearGradient></defs><rect x=%271%27 y=%271%27 width=%2730%27 height=%2730%27 rx=%276%27 fill=%27%230f172a%27/><rect x=%271%27 y=%271%27 width=%2730%27 height=%2730%27 rx=%276%27 fill=%27url(%23g)%27 opacity=%270.35%27/><text x=%2716%27 y=%2721%27 text-anchor=%27middle%27 font-family=%27Segoe UI, Inter, Arial%27 font-size=%2714%27 font-weight=%27700%27 fill=%27%23e5f2ff%27>P</text></svg>'" />
       <div class="brand">PrismPlay</div>
     </div>
     <div class="wrap">
