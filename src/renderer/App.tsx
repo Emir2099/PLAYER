@@ -985,6 +985,74 @@ function BadgeGrid() {
     }
   }, [videos, query, sort]);
 
+  // Apply search/sort to LIBRARY drill-in folder videos
+  const libFolderFiltered = useMemo<VideoItem[]>(() => {
+    let list = libFolderVideos;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(v => v.name.toLowerCase().includes(q));
+    }
+    switch (sort) {
+      case 'name':
+        return [...list].sort((a, b) => a.name.localeCompare(b.name));
+      case 'size':
+        return [...list].sort((a, b) => b.size - a.size);
+      default:
+        return [...list].sort((a, b) => b.mtime - a.mtime);
+    }
+  }, [libFolderVideos, query, sort]);
+
+  // Apply search/sort to videos within a selected category
+  const categoryVidsFiltered = useMemo<VideoItem[]>(() => {
+    if (!selectedCategoryId) return [];
+    const arr: VideoItem[] = [];
+    for (const it of categoryItems) {
+      if (it.type === 'video') {
+        const v = videos.find(x => x.path === it.path) || categoryVideoMap[it.path];
+        if (v) arr.push(v);
+      }
+    }
+    let list = arr;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(v => v.name.toLowerCase().includes(q));
+    }
+    switch (sort) {
+      case 'name':
+        return [...list].sort((a, b) => a.name.localeCompare(b.name));
+      case 'size':
+        return [...list].sort((a, b) => b.size - a.size);
+      default:
+        return [...list].sort((a, b) => b.mtime - a.mtime);
+    }
+  }, [selectedCategoryId, categoryItems, categoryVideoMap, videos, query, sort]);
+
+  // Filter and sort category cards (Library root)
+  const categoryCardsFiltered = useMemo(() => {
+    let list = allCategories || [];
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(c => (c.name || '').toLowerCase().includes(q));
+    }
+    if (sort === 'name') return [...list].sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === 'size') return [...list].sort((a, b) => (b.items?.length || 0) - (a.items?.length || 0));
+    const maxMtime = (c: any) => {
+      let max = 0;
+      const items: Array<{ type: 'video'|'folder'; path: string }> = c.items || [];
+      for (const it of items) {
+        if (it.type === 'video') {
+          const v = videos.find(x => x.path === it.path) || categoryVideoMap[it.path];
+          if (v && typeof v.mtime === 'number') max = Math.max(max, v.mtime);
+        } else if (it.type === 'folder') {
+          const f = categoryFolderMap[it.path];
+          if (f && typeof f.mtime === 'number') max = Math.max(max, f.mtime);
+        }
+      }
+      return max;
+    };
+    return [...list].sort((a, b) => maxMtime(b) - maxMtime(a));
+  }, [allCategories, query, sort, videos, categoryVideoMap, categoryFolderMap]);
+
   const chooseFolder = async () => {
     const sel = await window.api.selectFolder();
     if (sel) {
@@ -2090,8 +2158,8 @@ function BadgeGrid() {
               </div>
             )}
             {(!selectedCategoryId && !libFolderPath) ? (
-              // Show all categories as cards
-              allCategories.map((c) => (
+              // Show all categories as cards (filtered/sorted)
+              categoryCardsFiltered.map((c) => (
                 <div key={c.id} onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setCategoryMenu({ x: e.clientX, y: e.clientY, id: c.id }); }}>
                   <CategoryCard
                     title={c.name}
@@ -2112,7 +2180,7 @@ function BadgeGrid() {
                 </div>
               ))
             ) : libFolderPath ? (
-              libFolderVideos.map((vItem, idx) => (
+              libFolderFiltered.map((vItem, idx) => (
                 <div key={`lib-folder-video-${idx}`}
                      data-path={vItem.path}
                      draggable
@@ -2170,99 +2238,173 @@ function BadgeGrid() {
                 </div>
               ))
             ) : (
-              categoryItems.map((it, idx) => {
-                if (it.type === 'folder') {
-                  const fPath = it.path;
-                  const info = categoryFolderMap[fPath];
-                  const name = info?.name || fPath.split('\\').pop() || fPath;
-                  const cover = folderCovers[fPath];
-                  const count = folderCounts[fPath];
-                  const meta = `${count===undefined? '…' : `${count} ${count===1?'video':'videos'}`} • in category`;
-                  return (
-                    <div key={`cat-folder-${idx}`}
-                         draggable
-                         onDragStart={(e)=>{
-                           const payload = JSON.stringify([{ type: 'folder', path: fPath, sourceCategoryId: selectedCategoryId }]);
-                           e.dataTransfer.setData('application/x-player-item', payload);
-                           e.dataTransfer.effectAllowed = 'copy';
-                         }}
-                    >
-                      <FolderCard
-                        title={name}
-                        cover={cover}
-                        meta={meta}
-                        onOpen={async () => { await openLibraryFolder(fPath); }}
-                        onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setFolderMenu({ x: e.clientX, y: e.clientY, path: fPath }); }}
-                        onDropImage={async (imgPath) => {
-                          const res = await window.api.setFolderCover(fPath, imgPath);
-                          if (res?.ok && res.url) setFolderCovers(prev => ({ ...prev, [fPath]: res.url! }));
-                        }}
-                      />
+              // In a selected category: when searching, show matching videos (sorted); otherwise show original folders then videos
+              (query.trim() ? (
+                categoryVidsFiltered.map((vItem, idx) => (
+                  <div key={`cat-video-${idx}`}
+                       data-path={vItem.path}
+                       draggable
+                       onDragStart={(e)=>{
+                         const payload = JSON.stringify([{ type: 'video', path: vItem.path, sourceCategoryId: selectedCategoryId }]);
+                         e.dataTransfer.setData('application/x-player-item', payload);
+                         e.dataTransfer.effectAllowed = 'copy';
+                       }}
+                       onMouseEnter={async (e) => {
+                         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                         if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current);
+                         hoverDelayRef.current = window.setTimeout(async () => {
+                           setHoverRect(rect);
+                           const stats = await window.api.getWatchStats(vItem.path);
+                           const total = Math.round(stats.totalMinutes);
+                           const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
+                           const last14 = stats.last14Minutes ?? 0;
+                           setHoverPayload({
+                             title: vItem.name,
+                             thumb: vItem.thumb,
+                             lines: [
+                               `Last watched: ${last}`,
+                               `Last two weeks: ${last14} min`,
+                               `Total: ${total} min`,
+                             ],
+                             path: vItem.path,
+                             lastPositionSec: stats.lastPositionSec,
+                           });
+                          recomputeCompletion(vItem.path, vItem.duration, { totalMinutes: stats.totalMinutes, lastPositionSec: stats.lastPositionSec }).catch(()=>{});
+                         }, 150);
+                       }}
+                       onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
+                  >
+                    <div onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setItemMenu({ x: e.clientX, y: e.clientY, path: vItem.path }); }}>
+                    <GameCard
+                      title={vItem.name}
+                      cover={vItem.thumb}
+                      meta={[
+                        vItem.ext.toUpperCase(),
+                        formatBytes(vItem.size),
+                        formatDuration(vItem.duration),
+                        new Date(vItem.mtime).toLocaleDateString(),
+                      ].filter(Boolean).join(' • ')}
+                      watched={isWatched(vItem.path)}
+                      overlayThumb={vItem.thumb}
+                      overlayDetails={[
+                        'FILE INFO',
+                        `${vItem.ext.toUpperCase()} • ${formatBytes(vItem.size)}`,
+                        formatDuration(vItem.duration) ? `Duration: ${formatDuration(vItem.duration)}` : undefined,
+                      ].filter(Boolean) as string[]}
+                      onPlay={() => setSelected(vItem)}
+                      onClick={() => setSelected(vItem)}
+                    />
                     </div>
-                  );
-                } else {
-                  const vPath = it.path as string;
-                  const vItem = videos.find(x=>x.path===vPath) || categoryVideoMap[vPath];
-                  if (!vItem) return null;
-                  return (
-                    <div key={`cat-video-${idx}`}
-                         data-path={vItem.path}
-                         draggable
-                         onDragStart={(e)=>{
-                           const payload = JSON.stringify([{ type: 'video', path: vItem.path, sourceCategoryId: selectedCategoryId }]);
-                           e.dataTransfer.setData('application/x-player-item', payload);
-                           e.dataTransfer.effectAllowed = 'copy';
-                         }}
-                         onMouseEnter={async (e) => {
-                           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                           if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current);
-                           hoverDelayRef.current = window.setTimeout(async () => {
-                             setHoverRect(rect);
-                             const stats = await window.api.getWatchStats(vItem.path);
-                             const total = Math.round(stats.totalMinutes);
-                             const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
-                             const last14 = stats.last14Minutes ?? 0;
-                             setHoverPayload({
-                               title: vItem.name,
-                               thumb: vItem.thumb,
-                               lines: [
-                                 `Last watched: ${last}`,
-                                 `Last two weeks: ${last14} min`,
-                                 `Total: ${total} min`,
-                               ],
-                               path: vItem.path,
-                               lastPositionSec: stats.lastPositionSec,
-                             });
-                            recomputeCompletion(vItem.path, vItem.duration, { totalMinutes: stats.totalMinutes, lastPositionSec: stats.lastPositionSec }).catch(()=>{});
-                           }, 150);
-                         }}
-                         onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
-                    >
-                      <div onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setItemMenu({ x: e.clientX, y: e.clientY, path: vItem.path }); }}>
-                      <GameCard
-                        title={vItem.name}
-                        cover={vItem.thumb}
-                        meta={[
-                          vItem.ext.toUpperCase(),
-                          formatBytes(vItem.size),
-                          formatDuration(vItem.duration),
-                          new Date(vItem.mtime).toLocaleDateString(),
-                        ].filter(Boolean).join(' • ')}
-                        watched={isWatched(vItem.path)}
-                        overlayThumb={vItem.thumb}
-                        overlayDetails={[
-                          'FILE INFO',
-                          `${vItem.ext.toUpperCase()} • ${formatBytes(vItem.size)}`,
-                          formatDuration(vItem.duration) ? `Duration: ${formatDuration(vItem.duration)}` : undefined,
-                        ].filter(Boolean) as string[]}
-                        onPlay={() => setSelected(vItem)}
-                        onClick={() => setSelected(vItem)}
-                      />
+                  </div>
+                ))
+              ) : (
+                <>
+                  {/* Folders first (original order) */}
+                  {categoryItems.filter(it => it.type==='folder').map((it, idx) => {
+                    const fPath = it.path;
+                    const info = categoryFolderMap[fPath];
+                    const name = info?.name || fPath.split('\\').pop() || fPath;
+                    const cover = folderCovers[fPath];
+                    const count = folderCounts[fPath];
+                    const meta = `${count===undefined? '…' : `${count} ${count===1?'video':'videos'}`} • in category`;
+                    return (
+                      <div key={`cat-folder-${idx}`}
+                           draggable
+                           onDragStart={(e)=>{
+                             const payload = JSON.stringify([{ type: 'folder', path: fPath, sourceCategoryId: selectedCategoryId }]);
+                             e.dataTransfer.setData('application/x-player-item', payload);
+                             e.dataTransfer.effectAllowed = 'copy';
+                           }}
+                      >
+                        <FolderCard
+                          title={name}
+                          cover={cover}
+                          meta={meta}
+                          onOpen={async () => { await openLibraryFolder(fPath); }}
+                          onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setFolderMenu({ x: e.clientX, y: e.clientY, path: fPath }); }}
+                          onDropImage={async (imgPath) => {
+                            const res = await window.api.setFolderCover(fPath, imgPath);
+                            if (res?.ok && res.url) setFolderCovers(prev => ({ ...prev, [fPath]: res.url! }));
+                          }}
+                        />
                       </div>
-                    </div>
-                  );
-                }
-              })
+                    );
+                  })}
+                  {/* Then videos sorted by current sort */}
+                  {(() => {
+                    const arr: VideoItem[] = [];
+                    for (const it of categoryItems) {
+                      if (it.type === 'video') {
+                        const v = videos.find(x=>x.path===it.path) || categoryVideoMap[it.path];
+                        if (v) arr.push(v);
+                      }
+                    }
+                    let list = arr;
+                    switch (sort) {
+                      case 'name': list = [...list].sort((a,b)=> a.name.localeCompare(b.name)); break;
+                      case 'size': list = [...list].sort((a,b)=> b.size - a.size); break;
+                      default: list = [...list].sort((a,b)=> b.mtime - a.mtime); break;
+                    }
+                    return list.map((vItem, idx) => (
+                      <div key={`cat-video-${idx}`}
+                           data-path={vItem.path}
+                           draggable
+                           onDragStart={(e)=>{
+                             const payload = JSON.stringify([{ type: 'video', path: vItem.path, sourceCategoryId: selectedCategoryId }]);
+                             e.dataTransfer.setData('application/x-player-item', payload);
+                             e.dataTransfer.effectAllowed = 'copy';
+                           }}
+                           onMouseEnter={async (e) => {
+                             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                             if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current);
+                             hoverDelayRef.current = window.setTimeout(async () => {
+                               setHoverRect(rect);
+                               const stats = await window.api.getWatchStats(vItem.path);
+                               const total = Math.round(stats.totalMinutes);
+                               const last = stats.lastWatched ? new Date(stats.lastWatched).toLocaleString() : 'Never';
+                               const last14 = stats.last14Minutes ?? 0;
+                               setHoverPayload({
+                                 title: vItem.name,
+                                 thumb: vItem.thumb,
+                                 lines: [
+                                   `Last watched: ${last}`,
+                                   `Last two weeks: ${last14} min`,
+                                   `Total: ${total} min`,
+                                 ],
+                                 path: vItem.path,
+                                 lastPositionSec: stats.lastPositionSec,
+                               });
+                              recomputeCompletion(vItem.path, vItem.duration, { totalMinutes: stats.totalMinutes, lastPositionSec: stats.lastPositionSec }).catch(()=>{});
+                             }, 150);
+                           }}
+                           onMouseLeave={() => { if (hoverDelayRef.current) window.clearTimeout(hoverDelayRef.current); setHoverRect(null); setHoverPayload(null); }}
+                      >
+                        <div onContextMenu={(e)=>{ e.preventDefault(); e.stopPropagation(); setItemMenu({ x: e.clientX, y: e.clientY, path: vItem.path }); }}>
+                        <GameCard
+                          title={vItem.name}
+                          cover={vItem.thumb}
+                          meta={[
+                            vItem.ext.toUpperCase(),
+                            formatBytes(vItem.size),
+                            formatDuration(vItem.duration),
+                            new Date(vItem.mtime).toLocaleDateString(),
+                          ].filter(Boolean).join(' • ')}
+                          watched={isWatched(vItem.path)}
+                          overlayThumb={vItem.thumb}
+                          overlayDetails={[
+                            'FILE INFO',
+                            `${vItem.ext.toUpperCase()} • ${formatBytes(vItem.size)}`,
+                            formatDuration(vItem.duration) ? `Duration: ${formatDuration(vItem.duration)}` : undefined,
+                          ].filter(Boolean) as string[]}
+                          onPlay={() => setSelected(vItem)}
+                          onClick={() => setSelected(vItem)}
+                        />
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </>
+              ))
             )}
           </>
             ) : (
