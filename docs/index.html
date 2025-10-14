@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PrismPlay — Download for Windows</title>
+  <title>PrismPlay — Fast video library player for Windows</title>
     <meta name="description" content="PrismPlay is a modern, fast video library player for Windows." />
     <meta name="theme-color" content="#0b0f15" />
   <link rel="icon" type="image/png" href="prism_play_logo.png" />
@@ -30,7 +30,7 @@
       .nav { display:flex; gap:12px; align-items:center; padding:16px 20px; max-width:1200px; margin:0 auto; position: relative; z-index: 1; }
   .nav img { width:28px; height:28px; border-radius:6px; box-shadow: 0 6px 18px rgba(0,0,0,.35); object-fit: contain; background: rgba(255,255,255,0.06); }
       .nav .brand { font-weight:900; letter-spacing:0.3px; }
-      .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; position: relative; z-index: 1; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; position: relative; z-index: 1; }
       .hero { display:grid; grid-template-columns: 1.1fr 0.9fr; align-items: center; gap: 28px; padding: 26px; border:1px solid #1f2937; border-radius: 18px; background: linear-gradient(180deg, rgba(16,24,39,0.66), rgba(16,24,39,0.34)); box-shadow: 0 28px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.02); }
       .badge { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius: 999px; background: rgba(25,153,255,0.10); border: 1px solid rgba(148,163,184,0.25); color: #cbd5e1; font-size: 12px; }
       .h-title { font-size: clamp(30px, 6vw, 52px); font-weight: 900; letter-spacing: 0.2px; margin: 10px 0 10px; text-shadow: 0 8px 40px rgba(0,0,0,0.6); }
@@ -44,14 +44,24 @@
       .shot { aspect-ratio: 16/9; border: 1px solid #1f2937; border-radius: 12px; background: linear-gradient(180deg, #0a1220, #0b0f15); position: relative; overflow: hidden; }
       .shot:before { content:""; position:absolute; inset:0; background: radial-gradient(120% 100% at 50% 0%, rgba(25,153,255,0.14), transparent 40%); }
       .shot .ph { position:absolute; inset:0; display:grid; place-items:center; color:#7c8aa4; font-weight:700; letter-spacing:.2px; }
-      .features { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 16px; margin-top: 26px; }
-      .card { background: var(--card); border:1px solid #1f2937; border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+  .features { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 18px; margin-top: 26px; }
+  .card { background: var(--card); border:1px solid #1f2937; border-radius: 16px; padding: 18px; box-shadow: 0 14px 36px rgba(0,0,0,0.38); }
       .f-title { font-weight:900; margin-bottom:8px; }
       .f-icon { width: 28px; height: 28px; margin-bottom: 8px; opacity: .9 }
+  .card .shot { margin-top: 12px; }
+  .card .ph { font-size: 14px; }
+      .cards-4 { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 16px; }
+      .cards-2 { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+      .section { margin-top: 28px; }
+      .section h2 { margin: 10px 0 14px; font-size: 22px; }
+      .muted { color: var(--muted); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
       .footer { color:#94a3b8; font-size:12px; padding: 30px 0; text-align:center; }
       @media (max-width: 900px) {
         .hero { grid-template-columns: 1fr; }
         .features { grid-template-columns: 1fr; }
+        .cards-4 { grid-template-columns: 1fr; }
+        .cards-2 { grid-template-columns: 1fr; }
         .shots { grid-template-columns: 1fr; }
       }
     </style>
@@ -80,10 +90,11 @@
           </div>
           <div class="meta" id="meta">Fetching latest version…</div>
         </div>
-        <div class="shots">
-          <div class="shot"><div class="ph">Library preview</div></div>
-          <div class="shot"><div class="ph">Player preview</div></div>
-        </div>
+          <div class="shots">
+            <div class="shot">
+              <img alt="Splash screen preview" src="assets/splash_preview.png" style="width:100%; height:100%; object-fit: cover; display:block;" />
+            </div>
+          </div>
       </section>
 
       <section class="features">
@@ -91,17 +102,49 @@
           <svg class="f-icon" viewBox="0 0 24 24" fill="#93c5fd" xmlns="http://www.w3.org/2000/svg"><path d="M4 5h16v14H4z" opacity=".2"/><path d="M4 3h16a2 2 0 0 1 2 2v2H2V5a2 2 0 0 1 2-2Zm18 6H2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9Z"/></svg>
           <div class="f-title">Beautiful library</div>
           <div>Clean cards, quick search/sort, and smooth browsing on any display size.</div>
+          <div class="shot"><img alt="Library preview" src="assets/library_preview.png" style="width:100%; height:100%; object-fit: cover; display:block;" /></div>
         </div>
         <div class="card">
-          <svg class="f-icon" viewBox="0 0 24 24" fill="#86efac" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7L8 5Z"/></svg>
-          <div class="f-title">Smart playback</div>
-          <div>Custom controls, hover/scrub previews, auto‑hide UI, and instant resume.</div>
+          <svg class="f-icon" viewBox="0 0 24 24" fill="#86efac" xmlns="http://www.w3.org/2000/svg"><path d="M3 3h18v4H3z" opacity=".2"/><path d="M3 9h18v12H3z"/><path fill="#34d399" d="M7 12h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2zM7 16h6v2H7z"/></svg>
+          <div class="f-title">Detailed insights</div>
+          <div>Understand your watching: minutes, completions, daily streaks, and per‑category stats—at a glance.</div>
+          <div class="shot"><img alt="Insights preview" src="assets/insights_preview.png" style="width:100%; height:100%; object-fit: cover; display:block;" /></div>
         </div>
         <div class="card">
           <svg class="f-icon" viewBox="0 0 24 24" fill="#fcd34d" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 9 8l-7 1 5 5-1 7 6-3 6 3-1-7 5-5-7-1-3-6Z"/></svg>
           <div class="f-title">Optional achievements</div>
           <div>Track minutes watched or completions—or create your own badges.</div>
+          <div class="shot"><img alt="Achievements preview" src="assets/achievements_preview.png" style="width:100%; height:100%; object-fit: cover; display:block;" /></div>
         </div>
+      </section>
+
+      <section class="section">
+        <h2>Why PrismPlay?</h2>
+        <div class="cards-4">
+          <div class="card"><div class="f-title">Fast scans</div><div class="muted">Quickly index folders and get back to watching. Background metadata fetch with subtle caching.</div></div>
+          <div class="card"><div class="f-title">Discrete by design</div><div class="muted">No cloud. Your library stays local. Optional achievements and stats are stored on your device.</div></div>
+          <div class="card"><div class="f-title">Smooth navigation</div><div class="muted">Snappy browsing with instant search and sorting. Effortless library management without clutter.</div></div>
+          <div class="card"><div class="f-title">Lightweight</div><div class="muted">Efficient UI with GPU fallback safety and a small installer. Works great on laptops and desktops.</div></div>
+        </div>
+      </section>
+
+      
+
+      
+
+      
+
+      <section class="section" id="requirements">
+        <h2>System requirements</h2>
+        <div class="cards-2">
+          <div class="card"><div class="f-title">OS</div><div class="muted">Windows 10 or 11 (64-bit)</div></div>
+          <div class="card"><div class="f-title">Space</div><div class="muted">Installer ~204 MB • Installed app ~175 MB (plus cache as you watch)</div></div>
+        </div>
+      </section>
+
+      <section class="section" id="privacy">
+        <h2>Privacy</h2>
+        <div class="card"><div class="muted">PrismPlay stores your settings and stats locally. It does not upload your library or viewing data anywhere. No telemetry.</div></div>
       </section>
 
       <div class="footer">© <span id="year"></span> PrismPlay • <a href="https://github.com/Emir2099/PLAYER" target="_blank" rel="noopener" style="color:#93c5fd">GitHub</a></div>
@@ -110,6 +153,7 @@
     <script>
       const metaEl = document.getElementById('meta');
       const verEl = document.getElementById('rel-ver');
+      
       document.getElementById('year').textContent = new Date().getFullYear();
 
       // Try to pull latest release for version text and download size
@@ -124,13 +168,17 @@
           if (asset) {
             const sizeMB = (asset.size / (1024*1024)).toFixed(1);
             metaEl.textContent = `Latest: ${tag || 'unknown'} • ${sizeMB} MB • Published ${new Date(json.published_at).toLocaleDateString()}`;
+            
           } else {
             metaEl.textContent = `Latest: ${tag || 'unknown'} • Installer not found; using stable link.`;
+            
           }
         } catch (e) {
           metaEl.textContent = 'Latest release info unavailable. The download button points to the stable installer link.';
+          
         }
       })();
+      
     </script>
   </body>
 </html>
