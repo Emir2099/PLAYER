@@ -1697,7 +1697,6 @@ function BadgeGrid() {
               {sidebarExpanded ? <FaChevronLeft size={14} /> : <FaChevronRight size={14} />}
             </button>
             <div className="flex items-center gap-2">
-              <img src="/prism_play_logo.png" alt="PrismPlay" className="w-6 h-6 rounded-sm select-none" draggable={false} />
               <div className="text-2xl font-bold tracking-tight">PrismPlay</div>
             </div>
             {/* Desktop Settings button (hidden on small screens) */}
