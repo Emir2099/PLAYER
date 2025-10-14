@@ -1,6 +1,6 @@
 # PrismPlay (Windows)
 
-A desktop Electron + React app that scans a folder on your PC and shows your videos in a sleek, Steam-inspired library UI with cards and a built-in player.
+A desktop Electron + React app that scans a folder on your PC and shows your videos in a sleek, clean library UI with cards and a built-in player.
 
 Features
 - Choose any folder and auto-scan for videos (mp4, mkv, avi, mov, wmv, webm, flv, m4v, ts, mts, m2ts)
