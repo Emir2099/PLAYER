@@ -37,7 +37,9 @@
     "electron-builder": "^26.0.12",
     "eslint": "^9.12.0",
     "eslint-plugin-react": "^7.37.2",
+    "jimp": "^1.6.0",
     "postcss": "^8.4.47",
+    "sharp": "^0.34.4",
     "tailwindcss": "^3.4.13",
     "tslib": "^2.8.0",
     "typescript": "^5.6.3",
@@ -47,7 +49,9 @@
   "build": {
     "appId": "com.local.prismplay",
     "artifactName": "PrismPlay-Setup.${ext}",
-    "directories": { "output": "release" },
+    "directories": {
+      "output": "release"
+    },
     "files": [
       "dist/**",
       "electron/main.js",
@@ -58,6 +62,18 @@
     "win": {
       "target": "nsis",
       "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "PrismPlay-Setup.${ext}"
     }
   }
 }
