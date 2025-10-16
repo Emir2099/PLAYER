@@ -11,6 +11,7 @@
     "build:ui": "vite build",
     "build:electron": "tsc -p electron/tsconfig.json",
     "build": "npm run build:ui && npm run build:electron",
+    "release": "electron-builder --win nsis --publish=always",
     "start": "cross-env NODE_ENV=production electron .",
     "lint": "eslint --ext .ts,.tsx src electron",
     "dist": "echo Packaging is disabled in this setup. Install electron-builder to enable."
@@ -24,6 +25,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.3.0"
+    ,"electron-updater": "^5.4.0"
   },
   "devDependencies": {
     "@types/mime-types": "^3.0.1",
@@ -75,5 +77,13 @@
       "deleteAppDataOnUninstall": false,
       "artifactName": "PrismPlay-Setup.${ext}"
     }
+    ,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Emir2099",
+        "repo": "PLAYER"
+      }
+    ]
   }
 }

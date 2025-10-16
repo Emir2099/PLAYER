@@ -1,4 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, Menu } from 'electron';
+// auto-update (electron-updater)
+let autoUpdater: any = null;
+try {
+  // lazy require to avoid dev-time issues
+  // @ts-ignore
+  const { autoUpdater: _au } = require('electron-updater');
+  autoUpdater = _au;
+} catch {}
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, promises as fs } from 'node:fs';
@@ -283,6 +291,49 @@ async function createWindow() {
 }
 
 app.whenReady().then(createWindow);
+
+// --- Auto-update: non-invasive, production-only ---
+try {
+  const isPackaged = app.isPackaged || process.env.NODE_ENV === 'production';
+  if (autoUpdater && isPackaged) {
+    try {
+      // do not auto download; prompt user before installing
+      autoUpdater.autoDownload = false;
+      autoUpdater.logger = null;
+      autoUpdater.on('update-available', (info: any) => {
+        try { mainWindow?.webContents.send('update:available', info); } catch {}
+      });
+      autoUpdater.on('update-downloaded', (info: any) => {
+        try { mainWindow?.webContents.send('update:downloaded', info); } catch {}
+      });
+      autoUpdater.on('error', (err: any) => {
+        try { mainWindow?.webContents.send('update:error', String(err)); } catch {}
+      });
+
+      // Check for updates shortly after startup
+      setTimeout(() => {
+        try { autoUpdater.checkForUpdates(); } catch {}
+      }, 10_000);
+    } catch {}
+  }
+} catch {}
+
+ipcMain.handle('update:download', async () => {
+  try {
+    if (!autoUpdater) return { ok: false, error: 'updater-unavailable' };
+    autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String(e) }; }
+});
+
+ipcMain.handle('update:install', async () => {
+  try {
+    if (!autoUpdater) return { ok: false, error: 'updater-unavailable' };
+    // quit and install
+    autoUpdater.quitAndInstall();
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String(e) }; }
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
