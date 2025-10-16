@@ -21,9 +21,9 @@ jobs:
         run: |
           npm ci
 
-      - name: Build UI
+      - name: Build (UI + electron)
         run: |
-          npm run build:ui
+          npm run build
 
       - name: Build and publish (electron-builder)
         env:
