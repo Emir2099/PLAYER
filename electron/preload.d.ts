@@ -109,6 +109,17 @@ type Api = {
         icon?: string;
         rarity?: string;
     }) => void) => () => void;
+    onUpdateAvailable: (cb: (info: any) => void) => () => void;
+    onUpdateDownloaded: (cb: (info: any) => void) => () => void;
+    onUpdateError: (cb: (err: any) => void) => () => void;
+    downloadUpdate: () => Promise<{
+        ok: boolean;
+        error?: string;
+    }>;
+    installUpdate: () => Promise<{
+        ok: boolean;
+        error?: string;
+    }>;
 };
 declare global {
     interface Window {
