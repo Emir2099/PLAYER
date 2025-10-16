@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { FaFolderOpen, FaPlay, FaInfoCircle, FaSearch, FaExternalLinkAlt, FaCog, FaMinus, FaWindowMaximize, FaWindowRestore, FaTimes, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import SettingsModal from './components/SettingsModal';
 import { ToastProvider, useToast } from './components/Toast';
+import UpdateBanner from './components/UpdateBanner';
 import GameCard from './components/GameCard';
 import FolderCard from './components/FolderCard';
 import HoverOverlay from './components/HoverOverlay';
@@ -2908,6 +2909,7 @@ function BadgeGrid() {
 
 const App: React.FC = () => (
   <ToastProvider>
+    <UpdateBanner />
     <Library />
   </ToastProvider>
 );

@@ -41,6 +41,12 @@ type Api = {
   getAchievementState: () => Promise<Record<string, { id: string; unlockedAt?: string; progress?: { current: number; target: number }; lastEvaluatedAt?: string }>>;
   resetAchievementState: (id?: string) => Promise<boolean>;
   onAchievementUnlocked: (cb: (payload: { id: string; name: string; icon?: string; rarity?: string }) => void) => () => void;
+  // Updates
+  onUpdateAvailable: (cb: (info: any) => void) => () => void;
+  onUpdateDownloaded: (cb: (info: any) => void) => () => void;
+  onUpdateError: (cb: (err: any) => void) => () => void;
+  downloadUpdate: () => Promise<{ ok: boolean; error?: string }>;
+  installUpdate: () => Promise<{ ok: boolean; error?: string }>;
 };
 
 const api: Api = {
@@ -78,6 +84,24 @@ const api: Api = {
     ipcRenderer.on('ach:unlocked', listener);
     return () => { try { ipcRenderer.removeListener('ach:unlocked', listener); } catch {} };
   },
+  // Updates
+  onUpdateAvailable: (cb: (info: any) => void) => {
+    const listener = (_e: any, info: any) => cb(info);
+    ipcRenderer.on('update:available', listener);
+    return () => { try { ipcRenderer.removeListener('update:available', listener); } catch {} };
+  },
+  onUpdateDownloaded: (cb: (info: any) => void) => {
+    const listener = (_e: any, info: any) => cb(info);
+    ipcRenderer.on('update:downloaded', listener);
+    return () => { try { ipcRenderer.removeListener('update:downloaded', listener); } catch {} };
+  },
+  onUpdateError: (cb: (err: any) => void) => {
+    const listener = (_e: any, err: any) => cb(err);
+    ipcRenderer.on('update:error', listener);
+    return () => { try { ipcRenderer.removeListener('update:error', listener); } catch {} };
+  },
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
 };
 
 declare global {
