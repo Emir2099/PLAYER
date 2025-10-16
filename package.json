@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "electron-store": "^9.0.0",
+    "electron-updater": "^6.6.2",
     "ffmpeg-static": "^5.2.0",
     "ffprobe-static": "^3.1.0",
     "fluent-ffmpeg": "^2.1.3",
