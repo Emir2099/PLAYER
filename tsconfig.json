@@ -5,13 +5,14 @@
     "jsx": "react-jsx",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
     "allowJs": false,
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "types": ["node", "vite/client"],
+  "types": ["node", "vite/client", "react", "react-dom", "react/jsx-runtime"],
     "baseUrl": ".",
     "paths": {
       "@components/*": ["src/components/*"]

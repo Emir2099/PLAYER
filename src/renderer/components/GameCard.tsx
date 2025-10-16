@@ -1,4 +1,4 @@
-import React from 'react';
+import * as React from 'react';
 import { FaPlay } from 'react-icons/fa';
 
 export type GameCardProps = {
