@@ -1,6 +1,6 @@
 {
   "name": "prismplay",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "author": "Emir2099",
   "description": "PrismPlay — a sleek video library player for Windows (Electron + React + TS)",
