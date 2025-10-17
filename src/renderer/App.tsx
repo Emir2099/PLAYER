@@ -1935,8 +1935,9 @@ function BadgeGrid() {
               <div className="rounded-xl p-5 bg-steam-panel border border-slate-800">
                 <div className="text-slate-200 font-semibold mb-3">Most watched folders</div>
                 <div className="space-y-2">
-                  {(insights?.byFolder||[]).map((f)=>{
-                    const max = Math.max(1, ...((insights?.byFolder||[]).map(x=>x.minutes)));
+                  {((insights?.byFolder||[]).slice().sort((a,b)=>b.minutes - a.minutes).slice(0,3)).map((f)=>{
+                    const arr = (insights?.byFolder||[]);
+                    const max = Math.max(1, ...(arr.map(x=>x.minutes)));
                     const pct = Math.round((f.minutes/max)*100);
                     const label = f.key.split('\\').pop() || f.key;
                     return (
@@ -2918,14 +2919,17 @@ export default App;
 
 // Lightweight sparkline SVG component
 const Sparkline: React.FC<{ data: number[]; labels?: string[]; height?: number; stroke?: string }>=({ data, labels, height=48, stroke='url(#sg)' })=>{
-  const w = Math.max(120, data.length * 8);
+  const w = Math.max(120, data.length * 10);
   const h = height;
   const max = Math.max(1, ...data);
-  const pts = data.map((v,i)=>{
+  const ptsArr = data.map((v,i)=>{
     const x = (i/(Math.max(1,data.length-1))) * (w-8) + 4;
-    const y = h - (v/max) * (h-10) - 5;
-    return `${x},${y}`;
-  }).join(' ');
+    const y = h - (v/max) * (h-12) - 6;
+    return { x, y, v };
+  });
+  const pts = ptsArr.map(p=>`${p.x},${p.y}`).join(' ');
+  const areaPts = `4,${h-6} ${pts} ${w-4},${h-6}`;
+  const maxIdx = ptsArr.reduce((mi, p, i) => p.v > ptsArr[mi].v ? i : mi, 0);
   return (
     <div className="w-full">
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-16">
@@ -2934,9 +2938,17 @@ const Sparkline: React.FC<{ data: number[]; labels?: string[]; height?: number; 
             <stop offset="0%" stopColor="#38bdf8" />
             <stop offset="100%" stopColor="#818cf8" />
           </linearGradient>
+          <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#818cf8" stopOpacity="0.06" />
+          </linearGradient>
         </defs>
-        <polyline fill="none" stroke={stroke} strokeWidth="2.5" points={pts} />
-        <polyline fill="url(#sg)" opacity="0.08" points={`4,${h-5} ${pts} ${w-4},${h-5}`} />
+        <polyline fill="none" stroke={stroke} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+        <polyline fill="url(#area)" opacity="1" points={areaPts} />
+        {/* markers */}
+        {ptsArr.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={i===maxIdx?3.2:1.6} fill={i===maxIdx? '#60a5fa' : '#94a3b8'} opacity={0.95} />
+        ))}
       </svg>
     </div>
   );
