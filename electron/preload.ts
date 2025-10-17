@@ -47,6 +47,9 @@ type Api = {
   onUpdateError: (cb: (err: any) => void) => () => void;
   downloadUpdate: () => Promise<{ ok: boolean; error?: string }>;
   installUpdate: () => Promise<{ ok: boolean; error?: string }>;
+  // Discord Rich Presence
+  setPresence: (activity: any) => Promise<{ ok: boolean; error?: string }>;
+  clearPresence: () => Promise<{ ok: boolean; error?: string }>;
 };
 
 const api: Api = {
@@ -102,6 +105,9 @@ const api: Api = {
   },
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
+  // Discord Rich Presence
+  setPresence: (activity: any) => ipcRenderer.invoke('presence:set', activity),
+  clearPresence: () => ipcRenderer.invoke('presence:clear'),
 };
 
 declare global {

@@ -120,6 +120,14 @@ type Api = {
         ok: boolean;
         error?: string;
     }>;
+    setPresence: (activity: any) => Promise<{
+        ok: boolean;
+        error?: string;
+    }>;
+    clearPresence: () => Promise<{
+        ok: boolean;
+        error?: string;
+    }>;
 };
 declare global {
     interface Window {

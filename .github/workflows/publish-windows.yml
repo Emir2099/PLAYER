@@ -21,6 +21,15 @@ jobs:
         run: |
           npm ci
 
+      - name: Inject Discord Client ID (for Rich Presence)
+        if: ${{ secrets.DISCORD_CLIENT_ID != '' }}
+        env:
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+        run: |
+          echo "Creating electron/discord-config.json"
+          mkdir electron || true
+          printf '{"discordClientId":"%s"}' "%DISCORD_CLIENT_ID" > electron/discord-config.json
+
       - name: Build (UI + electron)
         run: |
           npm run build

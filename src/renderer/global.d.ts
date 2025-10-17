@@ -34,6 +34,9 @@ declare interface Window {
   getDailyTotals: (days?: number) => Promise<{ dates: string[]; seconds: number[] }>;
   getAppSettings: () => Promise<{ enableHoverPreviews: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean; enableAutoplayNext?: boolean; autoplayCountdownSec?: number }>;
   setAppSettings: (v: { enableHoverPreviews?: boolean; enableScrubPreview?: boolean; enableAchievementChime?: boolean; enableAutoplayNext?: boolean; autoplayCountdownSec?: number }) => Promise<boolean>;
+  // Discord Rich Presence
+  setPresence: (activity: any) => Promise<{ ok: boolean; error?: string }>;
+  clearPresence: () => Promise<{ ok: boolean; error?: string }>;
   // Achievements
   getAchievements: () => Promise<Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: Array<{ metric: string; operator: string; target: number; window?: { rollingDays?: number }; filters?: { videos?: string[]; categories?: string[]; exts?: string[] } }>; notify?: boolean }>>;
   setAchievements: (defs: Array<{ id: string; name: string; description?: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary'; rules: Array<{ metric: string; operator: string; target: number; window?: { rollingDays?: number }; filters?: { videos?: string[]; categories?: string[]; exts?: string[] } }>; notify?: boolean }>) => Promise<boolean>;
