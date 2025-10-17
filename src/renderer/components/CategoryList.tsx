@@ -217,7 +217,7 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
       )}
       <div
         ref={listRef}
-        className="flex flex-col gap-1 overflow-auto max-h-[60vh]"
+        className="flex flex-col gap-1 overflow-auto flex-1 min-h-0"
         onDragOver={(e)=>{ dragHoverY.current = e.clientY; }}
         onDragLeave={()=>{ dragHoverY.current = null; }}
         onDrop={()=>{ dragHoverY.current = null; }}
@@ -255,25 +255,25 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
                   onBlur={commitRename}
                 />
               ) : (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="truncate" title={c.name}>{c.name}</span>
-                          {movingId===c.id && (
-                            <div className="flex items-center gap-1 ml-2">
-                              <button className="p-1 rounded hover:bg-slate-700" title="Move up" onClick={(e)=>{ e.stopPropagation(); moveCategoryBy(c.id, -1); }}><FaArrowUp /></button>
-                              <button className="p-1 rounded hover:bg-slate-700" title="Move down" onClick={(e)=>{ e.stopPropagation(); moveCategoryBy(c.id, 1); }}><FaArrowDown /></button>
-                              <button className="p-1 rounded hover:bg-slate-700 flex items-center justify-center" title="Done" onClick={(e)=>{ e.stopPropagation(); setMovingId(null); }}>
-                                <span className="inline-block w-4 h-4 relative">
-                                  <svg className="w-4 h-4 text-sky-400 animate-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M20 6L9 17l-5-5" />
-                                  </svg>
-                                </span>
-                              </button>
-                            </div>
-                          )}
+                <div className="min-w-0 flex items-center gap-2">
+                  <span className="truncate" title={c.name} style={{whiteSpace: 'nowrap'}}>{c.name}</span>
+                  {movingId===c.id && (
+                    <div className="flex items-center gap-1 ml-2 flex-none">
+                      <button className="p-1 rounded hover:bg-slate-700" title="Move up" onClick={(e)=>{ e.stopPropagation(); moveCategoryBy(c.id, -1); }}><FaArrowUp /></button>
+                      <button className="p-1 rounded hover:bg-slate-700" title="Move down" onClick={(e)=>{ e.stopPropagation(); moveCategoryBy(c.id, 1); }}><FaArrowDown /></button>
+                      <button className="p-1 rounded hover:bg-slate-700 flex items-center justify-center" title="Done" onClick={(e)=>{ e.stopPropagation(); setMovingId(null); }}>
+                        <span className="inline-block w-4 h-4 relative">
+                          <svg className="w-4 h-4 text-sky-400 animate-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">{c.items.length}</span>
+              <div className="flex items-center gap-2 flex-none" style={{minWidth: '56px'}}>
+                <span className="text-xs text-slate-400" style={{width: '20px', textAlign: 'right'}}>{c.items.length}</span>
                 <button
                   className="p-1 rounded hover:bg-slate-700"
                   onClick={(e)=>{ e.stopPropagation(); e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: c.id, name: c.name }); }}
