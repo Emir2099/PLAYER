@@ -19,6 +19,7 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
   const [menu, setMenu] = useState<{ x: number; y: number; id: string; name: string } | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const editingActive = editingId !== null || creating;
 
   const refresh = async () => {
@@ -85,6 +86,7 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
 
   const onDropTo = async (id: string, e: React.DragEvent) => {
     e.preventDefault();
+    setDragOverId(null);
     const payload = e.dataTransfer.getData('application/x-player-item');
     if (!payload) return;
     try {
@@ -224,11 +226,13 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
       >
         {sortedCats.map(c => (
           <div key={c.id}
-               className={`px-2 py-1 rounded cursor-pointer ${active===c.id? 'bg-slate-800 text-white':'hover:bg-slate-800/60'}`}
+               className={`px-2 py-1 rounded cursor-pointer ${active===c.id? 'bg-slate-800 text-white':'hover:bg-slate-800/60'} ${dragOverId===c.id ? 'bg-gradient-to-r from-sky-700/12 to-sky-600/6 ring-1 ring-sky-500/30' : ''}`}
                draggable={false}
                onClick={async ()=>{ if (ignoreClickRef.current) { ignoreClickRef.current = false; return; } setActive(c.id); onSelect?.(c.id); await window.api.setUiPrefs({ selectedCategoryId: c.id }); }}
-               onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; }}
-               onDrop={(e)=>onDropTo(c.id, e)}
+               onDragEnter={(e)=>{ e.preventDefault(); setDragOverId(c.id); e.dataTransfer.dropEffect='copy'; }}
+               onDragOver={(e)=>{ e.preventDefault(); setDragOverId(c.id); e.dataTransfer.dropEffect='copy'; }}
+               onDragLeave={()=>{ setDragOverId(null); }}
+               onDrop={(e)=>{ setDragOverId(null); onDropTo(c.id, e); }}
                onMouseDown={(e)=>{
                  // Start long-press timer to enter moving mode
                  if (pressTimer.current) window.clearTimeout(pressTimer.current);
