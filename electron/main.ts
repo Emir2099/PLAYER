@@ -73,7 +73,7 @@ async function migrateUserDataIfNeeded() {
         if (existsSync(newSettings)) {
           const newRaw = await fs.readFile(newSettings, 'utf-8').catch(()=>"{}") as string;
           const newData = JSON.parse(newRaw || '{}');
-          const merged = { ...oldData, ...newData };
+          const merged = { ...newData, ...oldData };
           await fs.writeFile(newSettings, JSON.stringify(merged, null, 2), 'utf-8').catch(()=>{});
         } else {
           await fs.copyFile(oldSettingsPath, newSettings).catch(()=>{});
