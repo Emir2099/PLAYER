@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { FaCog } from 'react-icons/fa';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { FaCog, FaSortAlphaDown, FaArrowUp, FaArrowDown } from 'react-icons/fa';
 import ContextMenu from './ContextMenu';
 
 type CatItem = { type: 'video' | 'folder'; path: string };
@@ -26,8 +26,16 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
       setCats(await window.api.getCategories());
   const prefs = await window.api.getUiPrefs();
   setActive(prefs.selectedCategoryId ?? null);
+  // initialize alphaSort from persisted prefs
+  try { setAlphaSort(!!prefs.alphaSort); } catch {}
     } catch {}
   };
+
+  // UI state: alphabetical sort toggle and long-press move
+  const [alphaSort, setAlphaSort] = useState(false);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const pressTimer = useRef<number | null>(null);
+  const ignoreClickRef = useRef<boolean>(false);
 
   useEffect(() => { refresh(); }, []);
 
@@ -128,10 +136,63 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
     return () => { running = false; if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, []);
 
+  const sortedCats = useMemo(() => {
+    if (alphaSort) {
+      try {
+        return cats.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
+      } catch {
+        return cats;
+      }
+    }
+    return cats;
+  }, [cats, alphaSort]);
+
+  // Try to persist a new order if the backend exposes an API.
+  const persistOrder = async (newCats: Category[]) => {
+    try {
+      const ids = newCats.map(c => c.id);
+      if ((window as any).api?.reorderCategories) {
+        await (window as any).api.reorderCategories(ids);
+      } else if ((window as any).api?.setCategoriesOrder) {
+        await (window as any).api.setCategoriesOrder(ids);
+      }
+    } catch {}
+  };
+
+  const moveCategoryBy = async (id: string, delta: number) => {
+    const idx = cats.findIndex(c => c.id === id);
+    if (idx === -1) return;
+    const newIndex = idx + delta;
+    if (newIndex < 0 || newIndex >= cats.length) return;
+    const next = cats.slice();
+    const [item] = next.splice(idx, 1);
+    next.splice(newIndex, 0, item);
+    setCats(next);
+    try { await persistOrder(next); } catch {}
+  };
+
+  // Persist alphaSort preference when toggled
+  const toggleAlphaSort = async (next?: boolean) => {
+    const val = typeof next === 'boolean' ? next : !alphaSort;
+    setAlphaSort(val);
+    try { await window.api.setUiPrefs({ alphaSort: val }); } catch {}
+  };
+
   return (
     <div className="flex flex-col gap-2">
+      {/* Inline small animation style for the check icon */}
+      <style>{`.animate-check{transform-origin:center;animation:checkpop .28s ease forwards}@keyframes checkpop{0%{transform:scale(.2) rotate(-10deg);opacity:0}60%{transform:scale(1.08) rotate(4deg);opacity:1}100%{transform:scale(1) rotate(0)}}`}</style>
       <div className="flex items-center justify-between text-xs text-slate-400">
-        <span className="px-1">Categories</span>
+        <div className="flex items-center gap-2">
+          <span className="px-1">Categories</span>
+          <button
+            title={alphaSort ? 'Showing alphabetical' : 'Toggle alphabetical sort'}
+            className={`p-1 rounded hover:bg-slate-800/60 ${alphaSort ? 'bg-slate-800 text-white' : ''}`}
+            onClick={(e)=>{ e.stopPropagation(); toggleAlphaSort(); }}
+          >
+            <FaSortAlphaDown />
+          </button>
+        </div>
         <button className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700" onClick={()=>{
           setCreating(v=>{
             const next = !v;
@@ -161,13 +222,23 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
         onDragLeave={()=>{ dragHoverY.current = null; }}
         onDrop={()=>{ dragHoverY.current = null; }}
       >
-        {cats.map(c => (
+        {sortedCats.map(c => (
           <div key={c.id}
                className={`px-2 py-1 rounded cursor-pointer ${active===c.id? 'bg-slate-800 text-white':'hover:bg-slate-800/60'}`}
                draggable={false}
-               onClick={async ()=>{ setActive(c.id); onSelect?.(c.id); await window.api.setUiPrefs({ selectedCategoryId: c.id }); }}
+               onClick={async ()=>{ if (ignoreClickRef.current) { ignoreClickRef.current = false; return; } setActive(c.id); onSelect?.(c.id); await window.api.setUiPrefs({ selectedCategoryId: c.id }); }}
                onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='copy'; }}
                onDrop={(e)=>onDropTo(c.id, e)}
+               onMouseDown={(e)=>{
+                 // Start long-press timer to enter moving mode
+                 if (pressTimer.current) window.clearTimeout(pressTimer.current);
+                 pressTimer.current = window.setTimeout(()=>{
+                   setMovingId(c.id);
+                   ignoreClickRef.current = true;
+                 }, 500);
+               }}
+               onMouseUp={()=>{ if (pressTimer.current) { window.clearTimeout(pressTimer.current); pressTimer.current = null; } }}
+               onMouseLeave={()=>{ if (pressTimer.current) { window.clearTimeout(pressTimer.current); pressTimer.current = null; } }}
           >
             <div className="flex items-center justify-between gap-2">
               {editingId===c.id ? (
@@ -184,7 +255,22 @@ const CategoryList: React.FC<Props> = ({ onSelect }) => {
                   onBlur={commitRename}
                 />
               ) : (
-                <span className="truncate" title={c.name}>{c.name}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="truncate" title={c.name}>{c.name}</span>
+                          {movingId===c.id && (
+                            <div className="flex items-center gap-1 ml-2">
+                              <button className="p-1 rounded hover:bg-slate-700" title="Move up" onClick={(e)=>{ e.stopPropagation(); moveCategoryBy(c.id, -1); }}><FaArrowUp /></button>
+                              <button className="p-1 rounded hover:bg-slate-700" title="Move down" onClick={(e)=>{ e.stopPropagation(); moveCategoryBy(c.id, 1); }}><FaArrowDown /></button>
+                              <button className="p-1 rounded hover:bg-slate-700 flex items-center justify-center" title="Done" onClick={(e)=>{ e.stopPropagation(); setMovingId(null); }}>
+                                <span className="inline-block w-4 h-4 relative">
+                                  <svg className="w-4 h-4 text-sky-400 animate-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M20 6L9 17l-5-5" />
+                                  </svg>
+                                </span>
+                              </button>
+                            </div>
+                          )}
+                </div>
               )}
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400">{c.items.length}</span>

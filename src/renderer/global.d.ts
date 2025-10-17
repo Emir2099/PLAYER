@@ -40,9 +40,9 @@ declare interface Window {
   getAchievementState: () => Promise<Record<string, { id: string; unlockedAt?: string; progress?: { current: number; target: number }; lastEvaluatedAt?: string }>>;
   resetAchievementState: (id?: string) => Promise<boolean>;
   onAchievementUnlocked: (cb: (payload: { id: string; name: string; icon?: string; rarity?: 'common'|'rare'|'epic'|'legendary' }) => void) => () => void;
-    // UI prefs
-    getUiPrefs: () => Promise<{ selectedCategoryId: string | null; categoryView: boolean }>;
-    setUiPrefs: (v: { selectedCategoryId?: string | null; categoryView?: boolean }) => Promise<boolean>;
+  // UI prefs
+  getUiPrefs: () => Promise<{ selectedCategoryId: string | null; categoryView: boolean; alphaSort?: boolean }>;
+  setUiPrefs: (v: { selectedCategoryId?: string | null; categoryView?: boolean; alphaSort?: boolean }) => Promise<boolean>;
     // Item lookups
     getVideoItem: (filePath: string) => Promise<RenderVideoItem | null>;
     getFolderItem: (dir: string) => Promise<{ path: string; name: string; mtime: number } | null>;
