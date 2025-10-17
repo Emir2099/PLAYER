@@ -14,7 +14,6 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
   const [ffprobePath, setFfprobePath] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [enableHoverPreviews, setEnableHoverPreviews] = useState<boolean>(true);
-  const [enableDiscordPresence, setEnableDiscordPresence] = useState<boolean>(true);
   const [enableScrubPreview, setEnableScrubPreview] = useState<boolean>(true);
   const [enableAchievementChime, setEnableAchievementChime] = useState<boolean>(true);
   const [enableAutoplayNext, setEnableAutoplayNext] = useState<boolean>(true);
@@ -37,7 +36,6 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
         setEnableHoverPreviews(!!s.enableHoverPreviews);
         if (typeof s.enableScrubPreview === 'boolean') setEnableScrubPreview(!!s.enableScrubPreview); else setEnableScrubPreview(true);
   if (typeof s.enableAchievementChime === 'boolean') setEnableAchievementChime(!!s.enableAchievementChime);
-  if (typeof (s as any).enableDiscordPresence === 'boolean') setEnableDiscordPresence(!!(s as any).enableDiscordPresence);
   if (typeof s.enableAutoplayNext === 'boolean') setEnableAutoplayNext(!!s.enableAutoplayNext); else setEnableAutoplayNext(true);
   if (typeof s.autoplayCountdownSec === 'number') setAutoplayCountdownSec(Math.min(10, Math.max(3, Math.round(s.autoplayCountdownSec)))); else setAutoplayCountdownSec(5);
       } catch {}
@@ -55,7 +53,7 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
     setSaving(true);
     try {
     await window.api.setFFPaths({ ffmpegPath: ffmpegPath || undefined, ffprobePath: ffprobePath || undefined });
-  await window.api.setAppSettings({ enableHoverPreviews, enableScrubPreview, enableAchievementChime, enableAutoplayNext, autoplayCountdownSec, enableDiscordPresence } as any);
+  await window.api.setAppSettings({ enableHoverPreviews, enableScrubPreview, enableAchievementChime, enableAutoplayNext, autoplayCountdownSec } as any);
       onSaved?.();
       onClose();
     } finally {
@@ -169,18 +167,6 @@ const SettingsModal: React.FC<Props> = ({ open, onClose, onSaved }) => {
               <span className="text-sm text-slate-200">Play sound on achievement unlock</span>
             </label>
             <div className="text-xs text-slate-400 mt-1">Adds a short chime when an achievement toast appears.</div>
-          </div>
-          <div>
-            <label className="inline-flex items-center gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={enableDiscordPresence}
-                onChange={e => setEnableDiscordPresence(e.target.checked)}
-                className="accent-steam-accent"
-              />
-              <span className="text-sm text-slate-200">Enable Discord Rich Presence</span>
-            </label>
-            <div className="text-xs text-slate-400 mt-1">When enabled, PrismPlay will show the current playing video as your Discord activity (opt-in). Requires Discord desktop app.</div>
           </div>
           <div>
             <div className="text-sm text-slate-300 mb-1">FFmpeg path (optional)</div>

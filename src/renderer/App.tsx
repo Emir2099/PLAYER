@@ -1251,8 +1251,6 @@ function BadgeGrid() {
       updateControlsVisibility(true);
       try { recomputeCompletion(t.path, v && Number.isFinite(v.duration) ? v.duration : undefined, { totalMinutes: undefined, lastPositionSec: v && Number.isFinite(v.currentTime) ? v.currentTime : undefined }).catch(()=>{}); } catch {}
       refreshHistory();
-  // Clear Discord presence when playback stops
-  try { window.api.clearPresence().catch(()=>{}); } catch {}
       // If ended, consider Next Up autoplay
   if (reason === 'ended' && appSettings.enableAutoplayNext !== false) {
         try {
@@ -2698,25 +2696,6 @@ function BadgeGrid() {
                   scheduleHideControls(1600);
                   refreshHistory();
                   const v = videoElRef.current; if (v) { setDurationSec(Number.isFinite(v.duration) ? v.duration : 0); setVolume(v.volume); setMuted(v.muted); setPlaybackRate(v.playbackRate); }
-                  try {
-                    // Show Discord Rich Presence if enabled (defaults to true)
-                    const enabled = (appSettings as any).enableDiscordPresence === undefined ? true : !!(appSettings as any).enableDiscordPresence;
-                    if (enabled) {
-                      const nowSec = Math.floor(Date.now() / 1000);
-                      const duration = (videoElRef.current && Number.isFinite(videoElRef.current.duration)) ? Math.floor(videoElRef.current.duration) : undefined;
-                      const activity: any = {
-                        details: selected.name || selected.path,
-                        state: `Watching`,
-                        timestamps: { start: nowSec },
-                        largeImageKey: 'splash_preview',
-                        largeImageText: selected.name || 'PrismPlay',
-                        smallImageKey: 'prism_play_logo_imresizer',
-                        smallImageText: 'PrismPlay'
-                      };
-                      if (duration && duration > 0) activity.timestamps.end = nowSec + duration;
-                      window.api.setPresence(activity).catch(()=>{});
-                    }
-                  } catch {}
                 }}
                 onTimeUpdate={(e) => {
                   try {

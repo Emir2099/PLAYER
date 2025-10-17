@@ -32,115 +32,6 @@ let splashWindow: BrowserWindow | null = null;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- Discord Rich Presence (lazy, optional) ---
-let rpcClient: any = null;
-let rpcConnected = false;
-const discordClientIdEnv = process.env.DISCORD_CLIENT_ID || process.env.PRISMPLAY_DISCORD_CLIENT_ID;
-
-// Try to read an embedded discord-config.json that CI may have injected into the app
-async function readEmbeddedDiscordClientId(): Promise<string | undefined> {
-  try {
-    const candidates = [
-      path.join(__dirname, 'discord-config.json'),
-      path.join(__dirname, '..', 'discord-config.json'),
-      path.join(app.getAppPath(), 'electron', 'discord-config.json'),
-      path.join(process.resourcesPath || '', 'electron', 'discord-config.json'),
-    ];
-    for (const p of candidates) {
-      try {
-        if (!p) continue;
-        if (existsSync(p)) {
-          const raw = await fs.readFile(p, 'utf-8').catch(() => '');
-          if (!raw) continue;
-          try {
-            const obj = JSON.parse(raw);
-            if (obj && obj.discordClientId) return String(obj.discordClientId);
-          } catch {}
-        }
-      } catch {}
-    }
-  } catch {}
-  return undefined;
-}
-
-async function initDiscordRpcIfNeeded() {
-  try {
-    // Respect stored preference if present (opt-in)
-    const enabled = (() => {
-      try { const v = store.get('enableDiscordPresence'); return v === undefined ? true : !!v; } catch { return true; }
-    })();
-    const clientId = ((): string | undefined => {
-      try { const s = store.get('discordClientId') as any; if (s) return String(s); } catch {}
-      // Prefer embedded config (CI wrote electron/discord-config.json) then env
-      try {
-        // readEmbeddedDiscordClientId is async, but this closure is sync; fall back to env here and let async read occur below
-      } catch {}
-      return discordClientIdEnv || undefined;
-    })();
-    // If no clientId yet, attempt to read embedded config file
-    if (!clientId) {
-      try {
-        const embedded = await readEmbeddedDiscordClientId();
-        if (embedded) {
-          // prefer embedded
-          // @ts-ignore
-          clientId = embedded;
-        }
-      } catch {}
-    }
-    if (!enabled) return;
-    if (!clientId) return;
-
-    // Lazy require to avoid dev-time issues
-    let RPC: any = null;
-    try { RPC = require('discord-rpc'); } catch { RPC = null; }
-    if (!RPC) return;
-
-    // Avoid double-init
-    if (rpcClient && rpcConnected) return;
-
-    rpcClient = new RPC.Client({ transport: 'ipc' });
-    rpcClient.on('ready', () => {
-      rpcConnected = true;
-      try { console.log('[discord] RPC ready'); } catch {}
-    });
-    rpcClient.on('disconnected', () => { rpcConnected = false; });
-    rpcClient.on('error', (e: any) => { try { console.warn('[discord] RPC error', e); } catch {} });
-    try {
-      await rpcClient.login({ clientId });
-    } catch (e) {
-      try { console.warn('[discord] RPC login failed', e); } catch {}
-      rpcClient = null;
-    }
-  } catch {}
-}
-
-function safeSetActivity(activity: any) {
-  try {
-    if (!rpcClient || !rpcConnected) return false;
-    // Avoid sending too-frequent updates; callers should debounce
-    try { rpcClient.setActivity(activity); return true; } catch (e) { try { console.warn('[discord] setActivity failed', e); } catch {} return false; }
-  } catch { return false; }
-}
-
-// IPC handlers for renderer to request presence changes
-ipcMain.handle('presence:set', async (_e, activity: any) => {
-  try {
-    if (!rpcClient || !rpcConnected) await initDiscordRpcIfNeeded();
-    const ok = safeSetActivity(activity);
-    return { ok };
-  } catch (e) { return { ok: false, error: String(e) }; }
-});
-
-ipcMain.handle('presence:clear', async () => {
-  try {
-    if (rpcClient && rpcConnected) {
-      try { rpcClient.clearActivity(); } catch {}
-    }
-    return { ok: true };
-  } catch (e) { return { ok: false, error: String(e) }; }
-});
-
 // Ensure app display name
 try { app.setName('PrismPlay'); } catch {}
 
@@ -235,9 +126,6 @@ type Settings = {
   achievements?: AchievementDefinition[];
   achievementsState?: Record<string, AchievementState>;
   disableHardwareAcceleration?: boolean;
-  // Discord presence
-  enableDiscordPresence?: boolean;
-  discordClientId?: string;
 };
 let store: { get: (k: keyof Settings) => any; set: (k: keyof Settings, v: any) => void };
 try {
@@ -449,16 +337,6 @@ ipcMain.handle('update:install', async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-});
-
-app.on('before-quit', () => {
-  try {
-    if (rpcClient) {
-      try { rpcClient.destroy?.(); } catch {}
-      rpcClient = null;
-      rpcConnected = false;
-    }
-  } catch {}
 });
 
 app.on('activate', () => {
